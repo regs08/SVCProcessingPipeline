@@ -1,0 +1,14 @@
+{
+  "sig_input_dir": "<PATH_TO_SIG_INPUT_ROOT>",
+  "process_all_subdirs": true,
+  "processed_dir": "sig_processed",
+  "resampled_dir": "sig_resampled",
+  "output_dir": "pipeline_outputs",
+  "summary_csv_name": "processed_sig_summary.csv",
+  "merge_script": "merge_resample_sig.R",
+  "merged_csv_name": "merged_spectra.csv",
+  "end_line_overrides": {
+    "silver": "2517.9",
+    "bronze": "2520.4"
+  }
+}

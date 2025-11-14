@@ -1,0 +1,31 @@
+.venv/
+.env
+.env.*
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# macOS clutter
+.DS_Store
+
+# Notebook metadata
+.ipynb_checkpoints/
+notebooks/spectral_change_analysis.ipynb
+notebooks/weekly_sig_spectra_visualization.ipynb
+
+# Pipeline artifacts (keep private data out of the repo)
+naming_ids/
+data/
+pipeline_outputs/
+sig_processed/
+sig_resampled/
+*.sig
+*processed_sig_summary.csv
+*merged_spectra.csv
+
+# Logs and temp files
+logs/
+*.log
+*.tmp

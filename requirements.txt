@@ -1,0 +1,2 @@
+prefect>=3.4.6
+pytest>=8.3.0
