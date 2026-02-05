@@ -2,9 +2,11 @@
 SigFileProcessor class for processing .sig files with configurable correction values.
 """
 
+import json
 import os
 import re
-from typing import Literal, List, Dict, Set, Optional
+from pathlib import Path
+from typing import Literal, List, Dict, Set, Optional, Union
 from os.path import abspath, expanduser
 
 
@@ -22,6 +24,44 @@ class SigFileProcessor:
         'bronze': "2212118",
         'silver': "1202103"
     }
+
+    @classmethod
+    def load_default_correction_types(cls, config_path: Union[str, Path]) -> Dict[str, str]:
+        """
+        Load predefined correction-type end-line values from a JSON file and set DEFAULT_CORRECTION_TYPES.
+
+        Expected JSON format (flat mapping):
+            {"bronze": "2520.4", "silver": "2517.9"}
+        """
+        path_obj = Path(config_path).expanduser()
+        if not path_obj.exists():
+            raise FileNotFoundError(f"Correction-types config file not found: {path_obj}")
+
+        with path_obj.open("r") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                "Correction-types config JSON must be an object mapping correction_type -> end_line string."
+            )
+
+        normalized: Dict[str, str] = {}
+        for key, value in data.items():
+            if key is None:
+                continue
+            correction_type = str(key).strip().lower()
+            if not correction_type:
+                continue
+            end_line_value = str(value).strip()
+            if not end_line_value:
+                raise ValueError(f"End-line value for correction type '{correction_type}' is empty in {path_obj}")
+            normalized[correction_type] = end_line_value
+
+        if not normalized:
+            raise ValueError(f"No correction types found in {path_obj}")
+
+        cls.DEFAULT_CORRECTION_TYPES = dict(normalized)
+        return cls.DEFAULT_CORRECTION_TYPES
     
     def __init__(self, correction_value: str = None, instrument_number: str = None, 
                  correction_type: str = None, correction_config: dict = None):

@@ -1,4 +1,8 @@
-"""Prefect-based orchestration for SIG processing and resampling."""
+"""CLI orchestration for SIG processing and resampling.
+
+Step 1: Process raw `.sig` files into cleaned `.sig` files + a summary CSV.
+Step 2: Run the R resampling script (`merge_resample_sig.R`) to produce a merged CSV.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +10,27 @@ import argparse
 import csv
 import json
 import logging
-import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
-
-from prefect import flow, get_run_logger, task
+from typing import Any, Iterable
 
 from sig_preprocessor.sig_processor import SigFileProcessor
+
+BUILTIN_CORRECTION_TYPES = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
+
+
+@dataclass(frozen=True)
+class PipelineSettings:
+    source_name: str
+    input_dir: Path
+    processed_dir: Path
+    resampled_dir: Path
+    summary_csv: Path
+    merge_script: Path
+    merged_csv_name: str
+    end_line_overrides: dict[str, str]
+    verbose: bool
 
 
 def _collect_summary_rows(
@@ -23,7 +40,7 @@ def _collect_summary_rows(
     instrument_name: str,
     correction_type: str,
     end_line_value: str,
-) -> Iterable[Dict[str, str]]:
+) -> Iterable[dict[str, str]]:
     for output_path in sorted(output_dir.glob("*.sig")):
         yield {
             "input_file": str(input_dir / output_path.name),
@@ -35,25 +52,127 @@ def _collect_summary_rows(
         }
 
 
-def _acquire_logger() -> logging.Logger:
-    try:
-        return get_run_logger()
-    except RuntimeError:
-        logger = logging.getLogger("sig_pipeline")
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter("%(levelname)s: %(message)s")
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-            logger.setLevel(logging.INFO)
-        return logger
+def _configure_logging(verbose: bool) -> logging.Logger:
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(level=level, format="%(levelname)s: %(message)s", force=True)
+    return logging.getLogger("sig_pipeline")
 
 
-def _process_sig_files(settings: Dict[str, Path | str], logger: logging.Logger) -> Path | None:
-    input_dir = Path(settings["input_dir"])
-    output_dir = Path(settings["processed_dir"])
-    summary_csv = Path(settings["summary_csv"])
-    verbose = bool(settings.get("verbose", False))
+def _load_json(path: Path) -> dict[str, Any]:
+    with path.expanduser().open() as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError(f"Config must be a JSON object: {path}")
+    return data
+
+
+def _resolve_under(base: Path, value: str) -> Path:
+    path_obj = Path(value).expanduser()
+    if path_obj.is_absolute():
+        return path_obj
+    return base / path_obj
+
+
+def _load_project_correction_types(
+    config: dict[str, Any],
+    input_dir: Path,
+    repo_root: Path,
+    logger: logging.Logger,
+) -> None:
+    """
+    Load DEFAULT_CORRECTION_TYPES for this run.
+
+    Priority:
+      1) config["correction_types_file"] (if provided)
+      2) config/calibrations/<project_name>.json (if present)
+
+    Always resets to built-in defaults first to avoid cross-run bleed.
+    """
+    SigFileProcessor.DEFAULT_CORRECTION_TYPES = dict(BUILTIN_CORRECTION_TYPES)
+
+    explicit = config.get("correction_types_file")
+    if explicit:
+        correction_path = _resolve_under(repo_root, str(explicit))
+        SigFileProcessor.load_default_correction_types(correction_path)
+        logger.info("Loaded correction types from %s", correction_path.resolve())
+        return
+
+    inferred = repo_root / "config" / "calibrations" / f"{input_dir.name}.json"
+    if inferred.exists():
+        SigFileProcessor.load_default_correction_types(inferred)
+        logger.info("Loaded correction types from %s", inferred.resolve())
+    else:
+        logger.debug("No calibration file found at %s; using built-in defaults.", inferred)
+
+
+def _expand_input_directories(config: dict[str, Any]) -> list[Path]:
+    explicit_dirs = config.get("sig_input_dirs")
+    if explicit_dirs:
+        if isinstance(explicit_dirs, str):
+            candidates = [item.strip() for item in explicit_dirs.split(";") if item.strip()]
+        else:
+            candidates = list(explicit_dirs)
+        return [Path(entry).expanduser() for entry in candidates]
+
+    base_dir_str = config.get("sig_input_dir")
+    if not base_dir_str:
+        raise ValueError("Configuration must provide 'sig_input_dir' or 'sig_input_dirs'.")
+    base_dir = Path(str(base_dir_str)).expanduser()
+
+    if not bool(config.get("process_all_subdirs")):
+        return [base_dir]
+
+    if not base_dir.is_dir():
+        return [base_dir]
+
+    subdirs: list[Path] = []
+    for child in sorted(base_dir.iterdir()):
+        if child.is_dir() and any(grandchild.suffix.lower() == ".sig" for grandchild in child.glob("*.sig")):
+            subdirs.append(child)
+    return subdirs or [base_dir]
+
+
+def build_settings(config: dict[str, Any], *, repo_root: Path, verbose: bool) -> PipelineSettings:
+    input_dir = Path(str(config["sig_input_dir"])).expanduser()
+    source_name = input_dir.name or "sig_input"
+
+    output_root: Path | None = None
+    if config.get("output_dir"):
+        output_root = _resolve_under(repo_root, str(config["output_dir"]))
+
+    base_output = output_root or repo_root
+    processed_root = _resolve_under(base_output, str(config["processed_dir"]))
+    resampled_root = _resolve_under(base_output, str(config["resampled_dir"]))
+    merge_script = _resolve_under(repo_root, str(config["merge_script"]))
+
+    processed_dir = processed_root / source_name
+    resampled_dir = resampled_root / source_name
+    summary_csv = processed_dir / f"{source_name}_{config['summary_csv_name']}"
+    merged_csv_name = f"{source_name}_{config['merged_csv_name']}"
+
+    overrides_raw = config.get("end_line_overrides") or {}
+    end_line_overrides = {
+        str(key).strip().lower(): str(value).strip() for key, value in overrides_raw.items() if key is not None
+    }
+
+    return PipelineSettings(
+        source_name=source_name,
+        input_dir=input_dir,
+        processed_dir=processed_dir,
+        resampled_dir=resampled_dir,
+        summary_csv=summary_csv,
+        merge_script=merge_script,
+        merged_csv_name=merged_csv_name,
+        end_line_overrides=end_line_overrides,
+        verbose=verbose,
+    )
+
+
+def process_sig_files(settings: PipelineSettings, logger: logging.Logger) -> Path | None:
+    input_dir = settings.input_dir
+    output_dir = settings.processed_dir
+    summary_csv = settings.summary_csv
+    verbose = settings.verbose
 
     output_dir.mkdir(parents=True, exist_ok=True)
     if not input_dir.exists():
@@ -82,22 +201,16 @@ def _process_sig_files(settings: Dict[str, Path | str], logger: logging.Logger) 
     instrument_value = str(consistency.get("instrument") or "")
     correction_type = instrument_name.lower()
 
-    if correction_type not in SigFileProcessor.DEFAULT_CORRECTION_TYPES:
-        logger.error("Unsupported instrument '%s'", instrument_name)
+    end_line_value = settings.end_line_overrides.get(correction_type) or SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(
+        correction_type
+    )
+    if not end_line_value:
+        logger.error("No end-line value available for correction type '%s'", correction_type)
         return None
 
     if verbose:
         logger.info("Instrument verified: %s (%s)", instrument_name, instrument_value)
         logger.info("Clearing previous processed SIG outputs")
-
-    overrides = settings.get("end_line_overrides") or {}
-    custom_end_line = overrides.get(correction_type)
-    default_end_line = SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(correction_type)
-    end_line_value = custom_end_line or default_end_line
-
-    if not end_line_value:
-        logger.error("No end-line value available for correction type '%s'", correction_type)
-        return None
 
     for path in output_dir.glob("*.sig"):
         try:
@@ -106,24 +219,9 @@ def _process_sig_files(settings: Dict[str, Path | str], logger: logging.Logger) 
             logger.warning("Could not remove %s: %s", path, exc)
 
     if verbose:
-        logger.info(
-            "Running SigFileProcessor with correction type '%s' (end line %s)",
-            correction_type,
-            end_line_value,
-        )
+        logger.info("Running SigFileProcessor (end line %s)", end_line_value)
 
-    if custom_end_line:
-        instrument_number = None
-        match = re.search(r"(\d{7})", instrument_value)
-        if match:
-            instrument_number = match.group(1)
-        processor = SigFileProcessor(
-            correction_value=custom_end_line,
-            instrument_number=instrument_number,
-        )
-    else:
-        processor = SigFileProcessor(correction_type=correction_type)
-
+    processor = SigFileProcessor(correction_value=end_line_value)
     processor.process_sig_files(
         input_folder=str(input_dir),
         output_folder=str(output_dir),
@@ -163,8 +261,8 @@ def _process_sig_files(settings: Dict[str, Path | str], logger: logging.Logger) 
     return summary_csv
 
 
-def _resample_with_r(
-    settings: Dict[str, Path | str],
+def resample_with_r(
+    settings: PipelineSettings,
     summary_csv: Path | None,
     logger: logging.Logger,
 ) -> Path | None:
@@ -172,11 +270,11 @@ def _resample_with_r(
         logger.error("Skipping resampling because SIG processing did not produce a summary.")
         return None
 
-    merge_script = Path(settings["merge_script"])
-    input_dir = Path(settings["processed_dir"])
-    output_dir = Path(settings["resampled_dir"])
-    output_file = settings["merged_csv_name"]
-    verbose = bool(settings.get("verbose", False))
+    merge_script = settings.merge_script
+    input_dir = settings.processed_dir
+    output_dir = settings.resampled_dir
+    output_file = settings.merged_csv_name
+    verbose = settings.verbose
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not merge_script.exists():
@@ -196,167 +294,80 @@ def _resample_with_r(
     ]
 
     logger.info("Running R merge script: %s", " ".join(cmd))
-    if verbose:
-        logger.info("Executing Rscript command")
     subprocess.run(cmd, check=True)
 
     merged_path = output_dir / output_file
     if merged_path.exists():
         logger.info("Merged spectra available at %s", merged_path.resolve())
-        if verbose:
-            logger.info("Completed resampling step")
         return merged_path
 
     logger.warning("Merged spectra file was not created at %s", merged_path)
     return None
 
 
-@task
-def process_sig_files_task(settings: Dict[str, Path | str]) -> Path | None:
-    logger = _acquire_logger()
-    return _process_sig_files(settings, logger)
-
-
-@task
-def resample_with_r_task(
-    settings: Dict[str, Path | str],
-    summary_csv: Path | None,
-) -> Path | None:
-    logger = _acquire_logger()
-    return _resample_with_r(settings, summary_csv, logger)
-
-
-def load_config(config_path: Path) -> Dict[str, Any]:
-    with config_path.expanduser().open() as cfg:
-        return json.load(cfg)
-
-
-def _expand_input_directories(config: Dict[str, Any]) -> List[Path]:
-    """
-    Resolve the set of SIG input directories to process based on configuration options.
-
-    Supports any of the following config keys (in priority order):
-        - "sig_input_dirs": explicit list of directories (list or semicolon-separated string)
-        - "sig_input_dir": single directory path
-            + if "process_all_subdirs" is truthy, iterate over immediate subdirectories
-              that contain at least one `.sig` file
-
-    Returns:
-        List[Path]: Concrete directory paths to process.
-    """
-    explicit_dirs = config.get("sig_input_dirs")
-    resolved: List[Path] = []
-
-    if explicit_dirs:
-        if isinstance(explicit_dirs, str):
-            candidates = [item.strip() for item in explicit_dirs.split(";") if item.strip()]
-        else:
-            candidates = explicit_dirs
-        for entry in candidates:
-            resolved.append(Path(entry).expanduser())
-        return resolved
-
-    base_dir_str = config.get("sig_input_dir")
-    if not base_dir_str:
-        raise ValueError("Configuration must provide 'sig_input_dir' or 'sig_input_dirs'.")
-    base_dir = Path(base_dir_str).expanduser()
-
-    process_subdirs = bool(config.get("process_all_subdirs"))
-    if not process_subdirs:
-        return [base_dir]
-
-    if not base_dir.is_dir():
-        return [base_dir]
-
-    subdirs = []
-    for child in sorted(base_dir.iterdir()):
-        if child.is_dir():
-            if any(grandchild.suffix.lower() == ".sig" for grandchild in child.glob("*.sig")):
-                subdirs.append(child)
-    return subdirs or [base_dir]
-
-
-def _resolve_output_path(base: Path | None, path_value: str) -> Path:
-    path_obj = Path(path_value).expanduser()
-    if path_obj.is_absolute() or base is None:
-        return path_obj
-    return base / path_obj
-
-
-def build_settings(config: Dict[str, Any], verbose: bool) -> Dict[str, Path | str]:
-    input_dir = Path(config["sig_input_dir"]).expanduser()
-    output_root = Path(config["output_dir"]).expanduser() if config.get("output_dir") else None
-    processed_root = _resolve_output_path(output_root, config["processed_dir"])
-    resampled_root = _resolve_output_path(output_root, config["resampled_dir"])
-    merge_script = Path(config["merge_script"]).expanduser()
-
-    source_name = input_dir.name or "sig_input"
-    processed_dir = processed_root / source_name
-    resampled_dir = resampled_root / source_name
-    summary_csv = processed_dir / f"{source_name}_{config['summary_csv_name']}"
-    merged_csv_name = f"{source_name}_{config['merged_csv_name']}"
-
-    return {
-        "source_name": source_name,
-        "input_dir": input_dir,
-        "processed_dir": processed_dir,
-        "resampled_dir": resampled_dir,
-        "summary_csv": summary_csv,
-        "merge_script": merge_script,
-        "merged_csv_name": merged_csv_name,
-        "output_root": output_root,
-        "end_line_overrides": config.get("end_line_overrides", {}),
-        "verbose": verbose,
-    }
-
-
-@flow
-def sig_pipeline_flow(config: Dict[str, Any], verbose: bool = False):
-    settings = build_settings(config, verbose)
-
-    summary_csv = process_sig_files_task(settings)
-    merged_csv = resample_with_r_task(settings, summary_csv)
-
-    return {
-        "summary_csv": summary_csv,
-        "merged_csv": merged_csv,
-    }
-
-
-def main() -> None:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the SIG processing pipeline")
+    parser.add_argument(
+        "--config",
+        default="config/weekly_data.json",
+        help="Path to the pipeline configuration file",
+    )
+    parser.add_argument(
+        "--input-dir",
+        help="Override the config's sig_input_dir and process only this directory.",
+    )
+    parser.add_argument(
+        "--step",
+        choices=["1", "2", "all"],
+        default="all",
+        help="Which step to run: 1=process+summary CSV, 2=R resampling only, all=run both steps.",
+    )
     parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose logging before and after each processing step",
     )
-    parser.add_argument(
-        "--config",
-        default="config/pipeline_config.json",
-        help="Path to the pipeline configuration file",
-    )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    config = load_config(Path(args.config))
-    input_dirs = _expand_input_directories(config)
-    overall_results = []
+
+def main() -> None:
+    args = _parse_args()
+    repo_root = Path(__file__).resolve().parent
+    logger = _configure_logging(args.verbose)
+
+    config_path = _resolve_under(repo_root, str(args.config))
+    config = _load_json(config_path)
+
+    if args.input_dir:
+        input_dirs = [Path(str(args.input_dir)).expanduser()]
+    else:
+        input_dirs = _expand_input_directories(config)
+
+    overall_results: list[tuple[Path, dict[str, Path | None]]] = []
 
     for input_dir in input_dirs:
         config_for_dir = dict(config)
         config_for_dir["sig_input_dir"] = str(input_dir)
-        try:
-            results = sig_pipeline_flow(config=config_for_dir, verbose=args.verbose)
-        except RuntimeError as exc:
-            print(f"Prefect execution failed for {input_dir} ({exc}); falling back to direct function call.")
-            logger = _acquire_logger()
-            settings = build_settings(config_for_dir, args.verbose)
-            summary_csv = _process_sig_files(settings, logger)
-            merged_csv = _resample_with_r(settings, summary_csv, logger)
-            results = {"summary_csv": summary_csv, "merged_csv": merged_csv}
-        overall_results.append((input_dir, results))
+
+        _load_project_correction_types(config_for_dir, input_dir, repo_root, logger)
+        settings = build_settings(config_for_dir, repo_root=repo_root, verbose=args.verbose)
+
+        summary_csv: Path | None
+        if args.step in {"1", "all"}:
+            summary_csv = process_sig_files(settings, logger)
+        else:
+            summary_csv = settings.summary_csv if settings.summary_csv.exists() else None
+            if summary_csv is None:
+                logger.error("Summary CSV not found at %s (run --step 1 first).", settings.summary_csv.resolve())
+
+        merged_csv: Path | None = None
+        if args.step in {"2", "all"}:
+            merged_csv = resample_with_r(settings, summary_csv, logger)
+
+        overall_results.append((input_dir, {"summary_csv": summary_csv, "merged_csv": merged_csv}))
 
     for directory, outputs in overall_results:
-        print(f"\nInput directory: {Path(directory).resolve()}")
+        print(f"\nInput directory: {directory.resolve()}")
         for label, path in outputs.items():
             if path:
                 print(f"  {label}: {Path(path).resolve()}")

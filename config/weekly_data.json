@@ -7,8 +7,5 @@
   "summary_csv_name": "processed_sig_summary.csv",
   "merge_script": "merge_resample_sig.R",
   "merged_csv_name": "merged_spectra.csv",
-  "end_line_overrides": {
-    "silver": "2517.9",
-    "bronze": "2520.4"
-  }
+  "end_line_overrides": {}
 }
