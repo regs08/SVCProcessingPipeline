@@ -36,24 +36,8 @@ class GroupSpec:
         delimiter: str = ",",
         return_namedtuple: bool = True,
     ) -> List[Union["GroupSpec", GroupTuple]]:
-        """
-        Build grouping specifications from a CSV containing `members` and `name` columns.
-
-        Args:
-            csv_path: Path to the CSV file.
-            members_column: Column containing member identifiers (comma-separated or iterable-like).
-            id_column: Optional single-value identifier column used when `members_column` is missing.
-            name_column: Column containing human-readable group names.
-            exclude_columns: Columns dropped from the data before processing (defaults to removing `reference`).
-            delimiter: Delimiter used when splitting string-based member lists.
-            return_namedtuple: Whether to return namedtuples (`True`) or GroupSpec instances (`False`).
-
-        Returns:
-            List of GroupTuple or GroupSpec objects, respecting `return_namedtuple`.
-        """
         df = pd.read_csv(csv_path)
 
-        # Build case-insensitive lookup (preserve first occurrence)
         column_lookup = {col.lower(): col for col in df.columns}
 
         drop_columns = [
@@ -109,7 +93,7 @@ class GroupSpec:
 
 
 class SVCDataProcessor:
-    """Compact OO processor for SVC spectra workflows (logic preserved)."""
+    """Compact OO processor for SVC spectra workflows."""
     SigEntry = namedtuple("SigEntry", ["index", "base_name", "number"])
     SAMPLE_NAME_PATTERN = re.compile(r"^(?P<base>.+?)\.(?P<num>\d+)(?:\.sig)?$", re.IGNORECASE)
     TRAILING_DIGITS_PATTERN = re.compile(r"^(?P<base>.*?)(?P<num>\d+)(?:\.sig)?$", re.IGNORECASE)
@@ -119,37 +103,19 @@ class SVCDataProcessor:
         """Load CSV file. Pass any additional pandas.read_csv() arguments via kwargs."""
         self.df: pd.DataFrame = pd.read_csv(file_path, **kwargs)
         return self
-    
-    def load_excel(self, file_path: str, sheet: Union[int, str] = 0):
-        """Load Excel file (legacy method for backward compatibility)."""
-        self.df: pd.DataFrame = pd.read_excel(file_path, sheet_name=sheet)
-        return self
 
     # ---------- Structure ----------
     def split_columns(self, name_col: Optional[str] = None):
-        assert hasattr(self, "df"), "Call load_csv or load_excel first."
+        assert hasattr(self, "df"), "Call load_csv first."
         self.name_col: str = name_col or self.df.columns[0]
         num_cols = self.df.select_dtypes(include='number').columns.tolist()
         xlike_cols = [c for c in self.df.columns if isinstance(c, str) and c.startswith("X")]
-        # Preserve order, unique
         self.wavelength_cols: List[str] = list(dict.fromkeys(num_cols + xlike_cols))
         return self
 
     # ---------- Parsing ----------
     @classmethod
     def normalize_sample_name(cls, value: Union[str, int, float]) -> str:
-        """
-        Normalize a raw sample name into the canonical `{name}.####` format (no `.sig` suffix).
-
-        Args:
-            value: Original sample name value.
-
-        Returns:
-            str: Normalized sample name.
-
-        Raises:
-            ValueError: If the value cannot be coerced into the expected format.
-        """
         raw = "" if value is None else str(value).strip()
         if not raw:
             raise ValueError("Sample name is empty or None.")
@@ -181,17 +147,6 @@ class SVCDataProcessor:
         *,
         inplace: bool = False,
     ) -> pd.DataFrame:
-        """
-        Normalize a sample-name column to `{name}.####` format without modifying other columns.
-
-        Args:
-            df: DataFrame containing the column.
-            column: Column name to normalize.
-            inplace: If True, mutate df in place; otherwise return a copy.
-
-        Returns:
-            pd.DataFrame: DataFrame with normalized sample names.
-        """
         target = df if inplace else df.copy()
         target[column] = target[column].astype(str).apply(cls.normalize_sample_name)
         return target
@@ -225,7 +180,6 @@ class SVCDataProcessor:
     def group_by(self, groups: Sequence[Union[int, Iterable[int]]], *, by: Literal["number", "index"] = "number"):
         assert hasattr(self, "entries"), "Call extract_sig_entries first."
 
-        # Clean warning format
         def _simple_warn_format(message, category, filename, lineno, line=None):
             return f"{category.__name__}: {message}\n"
         warnings.formatwarning = _simple_warn_format
@@ -244,18 +198,17 @@ class SVCDataProcessor:
             bucket: List[self.SigEntry] = []
             for val in vals:
                 if val not in available_values:
-                    warnings.warn(f"⚠️ Cannot find {by}={val}", UserWarning)
+                    warnings.warn(f"Cannot find {by}={val}", UserWarning)
                 else:
                     bucket.extend(lookup[val])
                     used_values.add(val)
             grouped.append(bucket)
 
-        # find entries not grouped
         uncovered_vals = available_values - used_values
         ungrouped_entries = [e for e in self.entries if getattr(e, by) in uncovered_vals]
         if ungrouped_entries:
             warnings.warn(
-                f"⚠️ Entries {[getattr(e, by) for e in ungrouped_entries]} do not belong to any group",
+                f"Entries {[getattr(e, by) for e in ungrouped_entries]} do not belong to any group",
                 UserWarning
             )
 
@@ -299,7 +252,6 @@ class SVCDataProcessor:
                     seen.add(b)
                     uniq.append(b)
             return ";".join(uniq) if uniq else first_row_name
-        # default: base_first
         if base_names:
             unique_bases = set(base_names)
             if len(unique_bases) > 1:
@@ -312,29 +264,13 @@ class SVCDataProcessor:
                 return f"{base_names[0]}.{str(first_number).zfill(4)}"
             return base_names[0]
         return first_row_name
-    
+
     @staticmethod
     def _generate_sample_name_with_min(base_name: str, group: Sequence["SVCDataProcessor.SigEntry"]) -> str:
-        """
-        Generate sample name by combining base name with minimum number of group.
-        
-        Args:
-            base_name (str): The base name to use (e.g., 'AVIRIS1')
-            group (Sequence[SigEntry]): The group of SigEntry objects
-            
-        Returns:
-            str: Generated sample name (e.g., 'AVIRIS1_1' for group numbers [1,2,3])
-        """
-        # Extract numbers from the group, filtering out None values
         numbers = [e.number for e in group if e.number is not None]
-        
         if not numbers:
-            # If no numbers found, return just the base name
             return base_name
-        
-        # Find minimum number in the group
-        min_number = min(numbers)
-        return f"{base_name}_{min_number}"
+        return f"{base_name}_{min(numbers)}"
 
     @staticmethod
     def _aggregate_rows(
@@ -383,8 +319,7 @@ class SVCDataProcessor:
                 continue
             self._validate_group_indices(self.df, group, g_id)
             row_idxs = self._row_indices(group)
-            
-            # Choose naming strategy
+
             override_name = None
             if override_names:
                 override_name = override_names[g_id - 1]
@@ -395,17 +330,16 @@ class SVCDataProcessor:
                 sample_name = self._generate_sample_name_with_min(base_name, group)
             else:
                 sample_name = self._pick_sample_name(self.df, name_col, group, row_idxs, name_strategy)
-            
+
             averaged = self._aggregate_rows(self.df, row_idxs, use_cols, agg_method)
-            
-            # Create grouping numbers string from the group's numbers
+
             group_numbers = [str(e.number) for e in group if e.number is not None]
             grouping_str = ",".join(group_numbers) if group_numbers else ""
-            
+
             averaged.insert(0, "row_indices", self._format_indices_display(row_idxs, index_base))
             averaged.insert(0, "grouping", grouping_str)
             averaged.insert(0, "name", sample_name)
-            
+
             out_rows.append(averaged)
 
         self.grouped_df: pd.DataFrame = pd.concat(out_rows, ignore_index=True) if out_rows else pd.DataFrame()
@@ -429,12 +363,11 @@ class SVCDataProcessor:
         ungrouped_mode: Literal["raw", "empty"] = "raw",
         index_base: int = 1
     ):
-        """
-        Stack self.grouped_df with ungrouped entries (raw spectra or empty spectral cells).
-        """
+        """Stack self.grouped_df with ungrouped entries (raw spectra or empty spectral cells)."""
         assert hasattr(self, "grouped_df"), "Call average_groups first."
         assert hasattr(self, "ungrouped_entries"), "Call group_by first to populate ungrouped_entries."
-        assert hasattr(self, "df") and hasattr(self, "wavelength_cols") and hasattr(self, "name_col"),                 "Ensure load_csv/split_columns ran."
+        assert hasattr(self, "df") and hasattr(self, "wavelength_cols") and hasattr(self, "name_col"), \
+            "Ensure load_csv/split_columns ran."
 
         grouped = self.grouped_df.copy()
 
@@ -457,7 +390,7 @@ class SVCDataProcessor:
         self.final_df = pd.concat([grouped, ungrouped_df_aligned], ignore_index=True)
         return self
 
-    # ---------- Pretty prints (groups + ungrouped) ----------
+    # ---------- Pretty prints ----------
     def debug_print_groups(self):
         """Print groups and ungrouped entries with clear headers and spacing."""
         assert hasattr(self, "grouped_entries"), "Call group_by first."
@@ -490,9 +423,7 @@ class SVCDataProcessor:
 
 
 class SigSpectraAverager:
-    """
-    Helper facade around SVCDataProcessor that normalizes sample names and averages spectra.
-    """
+    """Facade around SVCDataProcessor that normalizes sample names and averages spectra."""
 
     def __init__(self, df: pd.DataFrame, sample_col: str = "sample_name"):
         self.sample_col = sample_col
@@ -511,17 +442,6 @@ class SigSpectraAverager:
 
     @classmethod
     def from_csv(cls, file_path: str, sample_col: str = "sample_name", **kwargs) -> "SigSpectraAverager":
-        """
-        Instantiate the averager from a CSV file containing spectra.
-
-        Args:
-            file_path: Path to the spectra CSV.
-            sample_col: Column storing sample names.
-            **kwargs: Additional keyword arguments passed to pandas.read_csv.
-
-        Returns:
-            SigSpectraAverager: Configured instance ready for grouping/averaging.
-        """
         df = pd.read_csv(file_path, **kwargs)
         return cls(df, sample_col=sample_col)
 
@@ -549,7 +469,6 @@ class SigSpectraAverager:
             else:
                 members_source = (g,)
 
-            # Normalize members_source into a tuple of ints
             if isinstance(members_source, Iterable) and not isinstance(members_source, (str, bytes)):
                 flattened: List[int] = []
                 for value in members_source:
@@ -573,20 +492,6 @@ class SigSpectraAverager:
         name_strategy: str = "base_first",
         base_name: Optional[str] = None,
     ) -> pd.DataFrame:
-        """
-        Average spectra for the provided groups and return a new DataFrame.
-
-        Args:
-            groups: Sequence of tuples/iterables whose values map to the four-digit sample IDs.
-            method: Aggregation method to apply (defaults to arithmetic mean). Pass ``None`` to skip
-                aggregation and return the original spectra rows untouched.
-            index_base: Display base for index reporting (1-based by default).
-            name_strategy: Strategy forwarded to SVCDataProcessor.average_groups.
-            base_name: Optional base name override for generated sample names.
-
-        Returns:
-            pd.DataFrame: Averaged spectra rows (or the original rows when ``method`` is ``None``).
-        """
         normalized_groups = self._normalize_groups(groups)
         member_sets = [spec["members"] for spec in normalized_groups]
         custom_names = [spec["name"] for spec in normalized_groups]
@@ -594,13 +499,8 @@ class SigSpectraAverager:
         self.processor.group_by(member_sets, by="number")
 
         if method is None:
-            # No aggregation requested: still record grouping but retain original spectra rows.
             grouped_frames = []
             for name_spec, members in zip(normalized_groups, member_sets):
-                entries = []
-                for member in members:
-                    entries.extend(self.processor._ensure_iterable_group(member))
-                # Map member numbers back to row indices
                 rows = []
                 for entry in self.processor.entries:
                     if entry.number in members:
@@ -633,20 +533,7 @@ def find_spectra_by_name(
     case_sensitive: bool = False,
     exact_match: bool = False,
 ) -> pd.DataFrame:
-    """
-    Search across multiple spectra DataFrames for rows whose name column matches the search key.
-
-    Args:
-        dataframes: Iterable of pandas DataFrames containing spectra (each must have `name_column`).
-        search_key: String to match against the name column.
-        name_column: Column that stores the spectra identifier (defaults to ``"name"``).
-        case_sensitive: Whether to treat the match as case-sensitive.
-        exact_match: When True, match only names equal to the search key; otherwise substring search.
-
-    Returns:
-        pd.DataFrame: Concatenated matches, including a `_source_index` column indicating which
-        input DataFrame the row came from. Returns an empty DataFrame if no rows match.
-    """
+    """Search across multiple spectra DataFrames for rows whose name column matches search_key."""
     if not search_key:
         raise ValueError("search_key must be a non-empty string.")
 

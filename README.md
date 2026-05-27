@@ -1,6 +1,6 @@
-# Hybrid SIG Processing Pipeline
+# SIG Processing Pipeline
 
-Hybrid Python ➜ R ➜ Python utilities for processing SIG spectra, resampling spectra in R, and aggregating summaries. `run_pipeline.py` is the single entry point (it builds Prefect tasks around the processing/resampling stages), while `merge_resample_sig.R` performs the R-based resampling.
+Pure-Python utilities for processing SIG spectra, resampling spectra, and aggregating summaries. `run_pipeline.py` is the single entry point, while `pipeline/resampler.py` performs the Python-based resampling (replacing the former R dependency).
 
 ## Quick Start
 - Create and activate a virtual environment before installing requirements:
@@ -9,30 +9,32 @@ Hybrid Python ➜ R ➜ Python utilities for processing SIG spectra, resampling 
   source .venv/bin/activate  # (zsh/bash) or: . .venv/bin/activate
   python -m pip install -r requirements.txt
   ```
-- Install R locally (e.g., `brew install r` on macOS) so `merge_resample_sig.R` can run through `Rscript`.
-- Copy `config/weekly_data.json` (or create a similar run config) and update it with your own paths (see [Configuration](#configuration)).
-- Execute the pipeline: `python run_pipeline.py --config config/<your_config>.json --verbose`.
+- Copy `config/config.json` (or create a similar run config) and update it with your own paths (see [Configuration](#configuration)).
+- Execute the pipeline: `python run_pipeline.py --config config/config.json --verbose`.
 
 ## Pipeline Overview
 - **Inputs**: Raw `.sig` files placed wherever `sig_input_dir` points (commonly under a private `data/` tree kept outside of version control).
 - **Stage 1 — Python (SigFileProcessor)**: Cleans the files and writes processed spectra to `processed_dir` (usually `pipeline_outputs/sig_processed/<run>/`).
-- **Stage 2 — R (`merge_resample_sig.R`)**: Resamples the spectra, producing per-run CSVs `merged_csv_name` inside `resampled_dir`.
+- **Stage 2 — Python (Resampler)**: Resamples the spectra using `pipeline/resampler.py`, producing per-run CSVs `merged_csv_name` inside `resampled_dir`.
 - **Stage 3 — Python (Summary Writer)**: Generates a `*_processed_sig_summary.csv` that ties input ↔ processed files and captures the instrument/end-line metadata.
-- **Orchestration**: `run_pipeline.py` glues the three stages together with Prefect tasks, logs progress, and exits early if validation fails (empty input dir, inconsistent instrument, missing scripts, etc.).
+- **Orchestration**: `run_pipeline.py` glues the three stages together, logs progress, and exits early if validation fails (empty input dir, inconsistent instrument, etc.).
 
 ## Repository Layout
-- `config/weekly_data.json` — Main run configuration consumed by `run_pipeline.py`.
+- `config/config.json` — Main run configuration consumed by `run_pipeline.py`.
 - `config/calibrations/` — Optional per-project correction-type calibration files loaded by naming convention or explicit path.
-- `merge_resample_sig.R` — R script that resamples SIG spectra and writes merged CSVs.
-- `pipeline/` & `sig_preprocessor/` — Python building blocks that the orchestrator imports.
+- `pipeline/` — Python package containing all pipeline building blocks:
+  - `sig_processor.py` — `SigFileProcessor`: truncates raw `.sig` files at the instrument end-line.
+  - `processor.py` — `SVCDataProcessor` / `SigSpectraAverager`: grouping and averaging utilities.
+  - `resampler.py` — `resample_spectra()`: pure-Python replacement for the former R resampling script.
 - `pipeline_outputs/` — Default destination for `sig_processed/` and `sig_resampled/` artifacts (ignored by git).
 - `notebooks/` — Visualization and exploratory analysis notebooks. They assume relative paths or placeholder strings that you should update locally.
 - `naming_ids/` — Private lookup tables for weekly runs (ignored by git; keep your copies outside of commits).
+- `tests/` — Pytest suite including the R-vs-Python parity check.
 
 ## Configuration
 This repo ships with two different config file types:
 
-- `config/weekly_data.json` (run config): controls input discovery, output folders, and filenames for each pipeline run.
+- `config/config.json` (run config): controls input discovery, output folders, and filenames for each pipeline run.
 - `config/calibrations/72424_Crittenden_SVC_Bronze.json` (calibration config): maps correction type to end-line values used by `SigFileProcessor`:
   ```json
   {
@@ -41,7 +43,7 @@ This repo ships with two different config file types:
   }
   ```
 
-Run-config example (`config/weekly_data.json` style):
+Run-config example (`config/config.json` style):
 
 ```json
 {
@@ -51,7 +53,6 @@ Run-config example (`config/weekly_data.json` style):
   "resampled_dir": "sig_resampled",
   "output_dir": "pipeline_outputs",
   "summary_csv_name": "processed_sig_summary.csv",
-  "merge_script": "merge_resample_sig.R",
   "merged_csv_name": "merged_spectra.csv",
   "end_line_overrides": {
     "silver": "2517.9"
@@ -72,18 +73,39 @@ Calibration loading order in `run_pipeline.py`:
 
 ## Running the Pipeline
 1. Populate the directory referenced by `sig_input_dir` with one or more `.sig` files.
-2. Ensure the `merge_script` path in your config resolves to the R script (relative or absolute).
-3. Run `python run_pipeline.py --config config/<run>.json --verbose`.
-4. Inspect the logs—Prefect will highlight validation warnings (instrument mismatches, empty directories, etc.).
-5. Review outputs:
+2. Run `python run_pipeline.py --config config/config.json --verbose`.
+3. Inspect the logs — validation warnings (instrument mismatches, empty directories, etc.) are surfaced at the start.
+4. Review outputs:
    - Processed `.sig` files under `processed_dir`.
    - `*_processed_sig_summary.csv` summarizing each processed file and instrument metadata.
-   - Resampled CSV(s) inside `resampled_dir` created by `merge_resample_sig.R`.
+   - Resampled CSV(s) inside `resampled_dir` created by `pipeline/resampler.py`.
+
+## Parity Test (Python vs. former R pipeline)
+A parity test confirms that the Python resampler produces values matching a reference CSV generated by the original R/spectrolab pipeline. It is skipped automatically in CI unless the reference data is provided.
+
+```bash
+pytest tests/test_resampler_parity.py \
+    --r-reference-csv=/path/to/r_output/merged_spectra.csv \
+    --r-input-dir=/path/to/processed_sig_files/
+```
+
+Or via environment variables:
+
+```bash
+R_REFERENCE_CSV=/path/to/r_output/merged_spectra.csv \
+R_INPUT_DIR=/path/to/processed_sig_files/ \
+pytest tests/test_resampler_parity.py
+```
+
+The default tolerance is 1e-3 (0.1% reflectance absolute difference). Override with `MAX_RESAMPLER_DIFF=<value>` if needed.
 
 ## Notebooks
-`notebooks/sig_spectra_visualization.ipynb` and `notebooks/spectral_change_analysis.ipynb` offer quick plots over processed / resampled outputs. Update their placeholder strings (e.g., `<REPO_ROOT>/pipeline_outputs/...`) with your actual run folders before executing cells. Keep notebooks committed without personal paths; the placeholders ensure the public repo does not reveal your machine details.
+`notebooks/sig_spectra_visualization.ipynb` offers quick plots over processed / resampled outputs. Update its placeholder strings (e.g., `<REPO_ROOT>/pipeline_outputs/...`) with your actual run folders before executing cells. Keep notebooks committed without personal paths; the placeholders ensure the public repo does not reveal your machine details.
 
-## Testing & Extensibility
-- Lightweight Prefect orchestration tests live under `tests/` (invoke with `pytest` once you add tests).
-- Add validation or alternative stages by subclassing components in `pipeline/stages.py`.
-- When automating deployments (Makefile, GitHub Actions, etc.), remember to set environment variables or copy config templates before execution.
+## Testing
+Run the full test suite with:
+```bash
+pytest
+```
+Add validation or alternative stages by subclassing components in `pipeline/`.
+When automating deployments (Makefile, GitHub Actions, etc.), remember to set environment variables or copy config templates before execution.

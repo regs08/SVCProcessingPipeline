@@ -1,7 +1,7 @@
 """CLI orchestration for SIG processing and resampling.
 
 Step 1: Process raw `.sig` files into cleaned `.sig` files + a summary CSV.
-Step 2: Run the R resampling script (`merge_resample_sig.R`) to produce a merged CSV.
+Step 2: Run the pure-Python resampler (`pipeline/resampler.py`) to produce a merged CSV.
 """
 
 from __future__ import annotations
@@ -10,12 +10,12 @@ import argparse
 import csv
 import json
 import logging
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from sig_preprocessor.sig_processor import SigFileProcessor
+from pipeline.sig_processor import SigFileProcessor
+from pipeline.resampler import resample_spectra
 
 BUILTIN_CORRECTION_TYPES = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
 
@@ -27,7 +27,6 @@ class PipelineSettings:
     processed_dir: Path
     resampled_dir: Path
     summary_csv: Path
-    merge_script: Path
     merged_csv_name: str
     end_line_overrides: dict[str, str]
     verbose: bool
@@ -79,15 +78,6 @@ def _load_project_correction_types(
     repo_root: Path,
     logger: logging.Logger,
 ) -> None:
-    """
-    Load DEFAULT_CORRECTION_TYPES for this run.
-
-    Priority:
-      1) config["correction_types_file"] (if provided)
-      2) config/calibrations/<project_name>.json (if present)
-
-    Always resets to built-in defaults first to avoid cross-run bleed.
-    """
     SigFileProcessor.DEFAULT_CORRECTION_TYPES = dict(BUILTIN_CORRECTION_TYPES)
 
     explicit = config.get("correction_types_file")
@@ -143,7 +133,6 @@ def build_settings(config: dict[str, Any], *, repo_root: Path, verbose: bool) ->
     base_output = output_root or repo_root
     processed_root = _resolve_under(base_output, str(config["processed_dir"]))
     resampled_root = _resolve_under(base_output, str(config["resampled_dir"]))
-    merge_script = _resolve_under(repo_root, str(config["merge_script"]))
 
     processed_dir = processed_root / source_name
     resampled_dir = resampled_root / source_name
@@ -161,7 +150,6 @@ def build_settings(config: dict[str, Any], *, repo_root: Path, verbose: bool) ->
         processed_dir=processed_dir,
         resampled_dir=resampled_dir,
         summary_csv=summary_csv,
-        merge_script=merge_script,
         merged_csv_name=merged_csv_name,
         end_line_overrides=end_line_overrides,
         verbose=verbose,
@@ -261,7 +249,7 @@ def process_sig_files(settings: PipelineSettings, logger: logging.Logger) -> Pat
     return summary_csv
 
 
-def resample_with_r(
+def resample_with_python(
     settings: PipelineSettings,
     summary_csv: Path | None,
     logger: logging.Logger,
@@ -270,33 +258,19 @@ def resample_with_r(
         logger.error("Skipping resampling because SIG processing did not produce a summary.")
         return None
 
-    merge_script = settings.merge_script
     input_dir = settings.processed_dir
     output_dir = settings.resampled_dir
     output_file = settings.merged_csv_name
     verbose = settings.verbose
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not merge_script.exists():
-        logger.error("Merge script not found: %s", merge_script)
-        return None
-
     if verbose:
-        logger.info("Preparing to run merge script %s", merge_script.resolve())
-        logger.info("Input directory: %s", input_dir.resolve())
+        logger.info("Starting Python resampler on %s", input_dir.resolve())
 
-    cmd = [
-        "Rscript",
-        str(merge_script),
-        str(input_dir),
-        str(output_dir),
-        output_file,
-    ]
+    logger.info("Running Python resampler: %s -> %s/%s", input_dir, output_dir, output_file)
+    merged_path = resample_spectra(input_dir, output_dir, output_file)
 
-    logger.info("Running R merge script: %s", " ".join(cmd))
-    subprocess.run(cmd, check=True)
-
-    merged_path = output_dir / output_file
     if merged_path.exists():
         logger.info("Merged spectra available at %s", merged_path.resolve())
         return merged_path
@@ -320,7 +294,7 @@ def _parse_args() -> argparse.Namespace:
         "--step",
         choices=["1", "2", "all"],
         default="all",
-        help="Which step to run: 1=process+summary CSV, 2=R resampling only, all=run both steps.",
+        help="Which step to run: 1=process+summary CSV, 2=Python resampling only, all=run both steps.",
     )
     parser.add_argument(
         "--verbose",
@@ -362,7 +336,7 @@ def main() -> None:
 
         merged_csv: Path | None = None
         if args.step in {"2", "all"}:
-            merged_csv = resample_with_r(settings, summary_csv, logger)
+            merged_csv = resample_with_python(settings, summary_csv, logger)
 
         overall_results.append((input_dir, {"summary_csv": summary_csv, "merged_csv": merged_csv}))
 
