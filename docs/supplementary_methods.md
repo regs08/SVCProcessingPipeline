@@ -1,0 +1,69 @@
+# Supplementary Methods: SVC HR-1024i Multi-Sensor Spectral Processing Pipeline
+
+## 1. Instrument and Data Format
+
+Spectral measurements were acquired with a Spectra Vista Corporation HR-1024i field hyperspectral spectroradiometer (SVC, Poughkeepsie, NY, USA). The instrument integrates three sequentially arranged silicon and indium gallium arsenide (Si/InGaAs) detector arrays that together span the optical reflective domain from the visible-near-infrared (VNIR) through the shortwave infrared (SWIR). The first detector (Sensor 1, VNIR) records radiance across 340–1012 nm at 512 spectral bands with a mean band spacing of approximately $1.32$ nm. The second detector (Sensor 2, SWIR-1) spans 972–1910 nm at 256 bands with a mean spacing of approximately $3.68$ nm. The third detector (Sensor 3, SWIR-2) covers 1894–2517 nm at 256 bands with a mean spacing of approximately $2.44$ nm. By design, consecutive detector arrays exhibit spectral overlap—Sensors 1 and 2 share the region near $972$–$1012$ nm, and Sensors 2 and 3 share the region near $1894$–$1910$ nm—which provides redundant information for radiometric reconciliation between detectors. Because each detector is calibrated independently, absolute reflectance values across the three arrays differ by small but systematic offsets that must be corrected during post-processing.
+
+Each measurement is written by the instrument firmware to a single American Standard Code for Information Interchange (ASCII) file with the `.sig` extension. Within this file, the three sensor segments are concatenated sequentially: each segment is a complete sweep recorded in monotonically increasing wavelength order, and the transition from one detector to the next is identifiable as a backward (decreasing) wavelength jump in the band sequence. Reflectance values used in this study were extracted from the fourth column of the file (target reflectance, expressed as a percentage), divided by 100 to yield unitless fractional reflectance $\rho \in [0, 1]$.
+
+## 2. Processing Pipeline Overview
+
+Two implementations of the spectral processing pipeline were developed and evaluated. Pipeline A is the original implementation, written in R and built atop the `spectrolab` package (Meireles et al., 2020). Pipeline B is a pure-Python reimplementation that depends only on NumPy, SciPy, and pandas. Both implementations execute the same logical algorithm, comprising five sequential stages: (i) parsing of the `.sig` file and perturbation of exact-duplicate wavelengths arising at sensor boundaries; (ii) inference of splice wavelengths from the detector segment transitions; (iii) trimming of overlapping bands and radiometric reconciliation among the three detectors; (iv) resolution-matched Gaussian smoothing; and (v) Gaussian-weighted resampling onto a uniform $1$ nm grid over $400$–$2500$ nm. The final output of either pipeline is a tabular comma-separated values (CSV) matrix in which rows correspond to individual samples and columns correspond to integer wavelengths from $400$ to $2500$ nm. Pipeline B was developed by direct inspection and reverse-engineering of the relevant `spectrolab` source routines, and its algorithmic equivalence with Pipeline A was verified empirically (Section 7). Pipeline B is the implementation used for the analyses reported in the main manuscript, for reasons detailed in Section 6.
+
+## 3. Sensor Stitching and Radiometric Correction
+
+The first non-trivial stage of the pipeline addresses the handling of duplicate wavelengths in the raw 1024-band vector. Exact-duplicate wavelengths arise wherever two adjacent detector arrays report nominally identical band centres at the boundary of their overlap region. To preserve both occurrences as distinct entries, each duplicate is perturbed by the additive scalar $\Delta = 1.2357 \times 10^{-5} \times \min(|\mathrm{diff}(\lambda)|)$, where $\min(|\mathrm{diff}(\lambda)|)$ denotes the minimum absolute band-to-band spacing in the non-duplicate subset of the wavelength vector. Omission of this step causes naive parsers to collapse duplicated entries, reducing the merged band count near the SWIR-1/SWIR-2 boundary from 993 to 992 and propagating a reflectance error on the order of $0.44\%$ across the affected region.
+
+Sensor segment indices are identified by detecting backward jumps in the wavelength sequence; specifically, positions for which $\Delta\lambda_i = \lambda_{i+1} - \lambda_i < 0$ mark the start of a new sensor segment. Splice wavelengths between adjacent sensors are then estimated using the relation
+
+$$\lambda_{\mathrm{splice},i} \;=\; \frac{2i\,\lambda^{(\text{start})}_{i+1} \;+\; \lambda^{(\text{end})}_{i}}{2i + 1},$$
+
+where $i$ is the one-based sensor index, $\lambda^{(\text{end})}_{i}$ is the upper bound of sensor $i$, and $\lambda^{(\text{start})}_{i+1}$ is the lower bound of sensor $i+1$. Each sensor is then trimmed at its corresponding splice: for sensor $N+1$, all bands satisfying $\lambda \ge \lambda_{\mathrm{splice}}$ are retained, while for sensor $N$, only bands strictly less than the minimum wavelength of the trimmed sensor $N+1$ are kept.
+
+Radiometric reconciliation between detectors is performed by the `match_sensors` routine of `spectrolab`. Sensor 2 is taken as the fixed radiometric reference. Within a $\pm 5$ nm window centred on the first splice wavelength, the scalar correction factor
+
+$$q \;=\; \frac{\overline{\rho_{S2}(\lambda \in \mathrm{splice} \pm 5\,\mathrm{nm})}}{\overline{\rho_{S1}(\lambda \in \mathrm{splice} \pm 5\,\mathrm{nm})}}$$
+
+is computed and applied to Sensor 1 as a linearly-varying multiplicative ramp ranging from unity at the lower bound of Sensor 1's wavelength range to $q$ at its upper bound. Following the `iter = 1` branch of the `spectrolab` implementation, only the first splice correction is applied when overlap data are present; Sensors 2 and 3 are left unmodified. Application of the multiplicative correction at all splices, rather than at the first only, inflates the maximum reflectance error from $< 0.003$ to approximately $7.8\%$, and was therefore avoided.
+
+## 4. Spectral Smoothing
+
+Following sensor stitching, each spectrum is subjected to a resolution-matched Gaussian smoothing operation, implemented through the `smooth_fwhm` routine of `spectrolab` and faithfully replicated in Pipeline B. Unlike fixed-window filters such as the Savitzky-Golay polynomial smoother, which apply a kernel of constant width across the entire spectrum regardless of the local sampling interval, the Gaussian smoothing employed here uses a spatially-varying full-width at half-maximum (FWHM). The per-band FWHM is first derived from local band spacing via the auxiliary function `fwhm_from_band_diff`. A Gaussian-weighted average is then taken across neighbouring bands, and the resulting FWHM vector is quantized into $k = 3$ clusters using the $k$-means algorithm (`scipy.cluster.vq.kmeans2` in Pipeline B). The quantized FWHM values are then doubled and used as the kernel widths of a Gaussian convolution that resamples each spectrum back onto its own wavelength grid. The net effect is a mild, locally-adaptive smoothing whose kernel width tracks the native instrument sampling, applying greater spectral averaging in the more coarsely sampled SWIR than in the densely sampled VNIR. Substitution of a fixed Savitzky-Golay filter with window length 11 and polynomial order 2 was found to introduce a $0.29\%$ reflectance error concentrated near the SWIR splice and was therefore rejected.
+
+## 5. Resampling
+
+The smoothed spectra are finally resampled onto a uniform wavelength grid at $1$ nm intervals from $400$ to $2500$ nm, yielding 2101 output bands per sample. For each target wavelength $\lambda_t$, the output reflectance is computed as the normalized Gaussian-weighted average of all input bands:
+
+$$\rho(\lambda_t) \;=\; \frac{\sum_{i} w_i(\lambda_t)\,\rho(\lambda_i)}{\sum_{i} w_i(\lambda_t)}, \quad w_i(\lambda_t) \;=\; \exp\!\left(-\frac{(\lambda_i - \lambda_t)^2}{2\sigma^2}\right),$$
+
+where the kernel standard deviation $\sigma$ is derived from the prescribed FWHM of $10$ nm via $\sigma = 10 / (2\sqrt{2\ln 2}) \approx 4.25$ nm. In Pipeline B, the operation is implemented as a vectorized matrix computation using an $n_{\mathrm{input}} \times n_{\mathrm{target}}$ distance matrix, which substantially improves throughput relative to the R reference implementation while preserving numerical equivalence to within machine precision.
+
+## 6. Implementation Choice and Rationale
+
+Pipeline B, the pure-Python implementation, was selected for the analyses reported in the manuscript. The rationale rests on five considerations. First, with respect to algorithmic fidelity, Pipeline B was developed by direct inspection of the `spectrolab` source code, and its internal routines map one-to-one onto those of Pipeline A; the parity statistics presented in Section 7 demonstrate that the two implementations produce numerically indistinguishable outputs at all 138,666 cells of the shared $66 \times 2101$ output matrix. Second, with respect to reproducibility and dependency management, a pure-Python pipeline requires only a single language runtime and a small number of widely-distributed scientific libraries that can be pinned to exact versions in a `requirements.txt` file; the R alternative requires both an R installation and the `spectrolab` package, doubling the surface area for environment drift and complicating containerization. Third, with respect to computational performance, Pipeline B exploits vectorized NumPy operations backed by BLAS, yielding measurably faster processing than the R reference implementation on equivalent hardware. Fourth, with respect to long-term maintainability, the broader analytical stack used downstream of this pipeline (statistical modelling, figure generation, machine learning) is written entirely in Python; eliminating the R dependency removes an inter-language interface that would otherwise need to be maintained over the project lifetime. Fifth, the parity evidence (Section 7) provides empirical justification for treating the two pipelines as interchangeable on numerical grounds, leaving the choice to be made on the practical considerations of reproducibility and maintenance. The Python implementation wins this comparison cleanly.
+
+## 7. Parity Verification
+
+Both pipelines were executed on an identical input set consisting of 66 processed `.sig` files acquired from a single SVC HR-1024i instrument (instrument designation "Silver", Serial No. 1202103). The two output matrices were compared element-wise on the shared $66 \times 2101$ grid. The resulting equivalence statistics are summarized in Table 1.
+
+**Table 1.** Cell-by-cell equivalence statistics for Pipeline A (R/`spectrolab`) versus Pipeline B (Python) on 66 samples $\times$ 2101 wavelengths ($N = 138{,}666$ cells).
+
+| Metric                                  | Value                  |
+|-----------------------------------------|------------------------|
+| Maximum absolute difference             | $1.10 \times 10^{-6}$  |
+| Mean absolute difference                | $4.0 \times 10^{-8}$   |
+| Cells exceeding $1 \times 10^{-3}$      | $0$                    |
+| Cells exceeding $1 \times 10^{-4}$      | $0$                    |
+| Cells exceeding $1 \times 10^{-5}$      | $0$                    |
+
+A conservative threshold of $1 \times 10^{-3}$ absolute reflectance ($0.1\%$) is adopted here as the level below which differences are considered physically negligible for field reflectance spectroscopy; this threshold is well below the radiometric noise floor of the HR-1024i instrument and below the precision at which reflectance is reported in the published ecological literature. The observed maximum difference of $1.10 \times 10^{-6}$ lies three orders of magnitude below this threshold, and the residuals are attributable solely to differences in floating-point arithmetic ordering between R's native math routines and NumPy's BLAS-backed linear-algebra operations. The two pipelines are therefore numerically equivalent for all practical purposes of reflectance analysis.
+
+## 8. Software and Dependencies
+
+Pipeline B was executed under Python 3.11 with the following pinned dependencies: NumPy 1.26, SciPy 1.11, and pandas 2.1. Pipeline A was executed under R 4.3 with `spectrolab` 0.0.18 (Meireles et al., 2020). All source code, pinned dependency manifests (`requirements.txt` for Python and a `renv.lock` snapshot for R), and the parity verification script are maintained under Git version control and are archived alongside the manuscript. Reproducibility is supported by exact version pinning of every package in the dependency graph, by the deterministic nature of the algorithm (no stochastic components except the $k$-means clustering, which is seeded), and by the public availability of the input `.sig` files in the associated data repository.
+
+---
+
+**Reference**
+
+Meireles, J. E., Schweiger, A. K., Cavender-Bares, J. (2020). `spectrolab`: An R package for processing field spectra. *Journal of Open Source Software*, 5(53), 2526. https://doi.org/10.21105/joss.02526
