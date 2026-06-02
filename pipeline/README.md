@@ -7,9 +7,9 @@ Pure-Python building blocks for the SVC HR-1024i SIG processing pipeline. Every 
 ### [`sig_processor.py`](sig_processor.py) — `SigFileProcessor`
 Truncates and inspects raw `.sig` ASCII files emitted by the SVC HR-1024i instrument.
 
-- `DEFAULT_CORRECTION_TYPES` — built-in end-line values: `{"bronze": "2520.4", "silver": "2517.9"}` (units: nm, used as the trailing-line wavelength at which truncation stops).
+- `DEFAULT_CORRECTION_TYPES` — built-in sensor calibration end-line values: `{"bronze": "2520.4", "silver": "2517.9"}` (units: nm, used as the trailing-line wavelength at which truncation stops).
 - `DEFAULT_INSTRUMENT_NUMBERS` — known serial numbers: `{"bronze": "2212118", "silver": "1202103"}`.
-- `load_default_correction_types(config_path)` — classmethod that overwrites `DEFAULT_CORRECTION_TYPES` from a JSON file (same shape as files in [`config/calibrations/`](../config/calibrations/)).
+- `load_default_correction_types(config_path)` — classmethod that overwrites `DEFAULT_CORRECTION_TYPES` from a sensor calibration JSON file (same shape as files in [`config/calibrations/`](../config/calibrations/)).
 - `__init__(correction_value=…, correction_type=…, correction_config=…)` — three mutually exclusive ways to construct the processor. `correction_value` is the explicit end-line wavelength string; `correction_type` is one of the registered names (`bronze` / `silver`); `correction_config` is a dict with keys `end_line`, `instrument_number`, `name`.
 - `process_sig_files(input_folder, output_folder, verbose=False)` — iterate every `.sig` in `input_folder`, write a truncated copy to `output_folder`. Truncation keeps lines up to and including the first line that starts with `end_line_value`.
 - `check_instrument_consistency(folder_path)` — returns a dict with keys `consistent`, `instrument`, `instrument_name`, `files_by_instrument`, `total_files`, `warnings`. Used by the orchestrator to abort early when a folder mixes instruments.

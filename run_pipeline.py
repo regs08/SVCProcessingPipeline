@@ -17,7 +17,7 @@ from typing import Any, Iterable
 from pipeline.sig_processor import SigFileProcessor
 from pipeline.resampler import resample_spectra
 
-BUILTIN_CORRECTION_TYPES = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
+BUILTIN_SENSOR_CALIBRATIONS = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ def _collect_summary_rows(
     output_dir: Path,
     instrument_value: str,
     instrument_name: str,
-    correction_type: str,
+    sensor_type: str,
     end_line_value: str,
 ) -> Iterable[dict[str, str]]:
     for output_path in sorted(output_dir.glob("*.sig")):
@@ -46,7 +46,7 @@ def _collect_summary_rows(
             "processed_file": str(output_path),
             "instrument_value": instrument_value,
             "instrument_name": instrument_name,
-            "correction_type": correction_type,
+            "correction_type": sensor_type,
             "end_line_value": end_line_value,
         }
 
@@ -72,27 +72,27 @@ def _resolve_under(base: Path, value: str) -> Path:
     return base / path_obj
 
 
-def _load_project_correction_types(
+def _load_sensor_calibrations(
     config: dict[str, Any],
     input_dir: Path,
     repo_root: Path,
     logger: logging.Logger,
 ) -> None:
-    SigFileProcessor.DEFAULT_CORRECTION_TYPES = dict(BUILTIN_CORRECTION_TYPES)
+    SigFileProcessor.DEFAULT_CORRECTION_TYPES = dict(BUILTIN_SENSOR_CALIBRATIONS)
 
-    explicit = config.get("correction_types_file")
+    explicit = config.get("sensor_calibration_file") or config.get("correction_types_file")
     if explicit:
-        correction_path = _resolve_under(repo_root, str(explicit))
-        SigFileProcessor.load_default_correction_types(correction_path)
-        logger.info("Loaded correction types from %s", correction_path.resolve())
+        sensor_calibration_path = _resolve_under(repo_root, str(explicit))
+        SigFileProcessor.load_default_correction_types(sensor_calibration_path)
+        logger.info("Loaded sensor calibration from %s", sensor_calibration_path.resolve())
         return
 
     inferred = repo_root / "config" / "calibrations" / f"{input_dir.name}.json"
     if inferred.exists():
         SigFileProcessor.load_default_correction_types(inferred)
-        logger.info("Loaded correction types from %s", inferred.resolve())
+        logger.info("Loaded sensor calibration from %s", inferred.resolve())
     else:
-        logger.debug("No calibration file found at %s; using built-in defaults.", inferred)
+        logger.debug("No sensor calibration file found at %s; using built-in defaults.", inferred)
 
 
 def _expand_input_directories(config: dict[str, Any]) -> list[Path]:
@@ -187,13 +187,13 @@ def process_sig_files(settings: PipelineSettings, logger: logging.Logger) -> Pat
 
     instrument_name = str(consistency.get("instrument_name") or "")
     instrument_value = str(consistency.get("instrument") or "")
-    correction_type = instrument_name.lower()
+    sensor_type = instrument_name.lower()
 
-    end_line_value = settings.end_line_overrides.get(correction_type) or SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(
-        correction_type
+    end_line_value = settings.end_line_overrides.get(sensor_type) or SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(
+        sensor_type
     )
     if not end_line_value:
-        logger.error("No end-line value available for correction type '%s'", correction_type)
+        logger.error("No end-line value available for sensor type '%s'", sensor_type)
         return None
 
     if verbose:
@@ -225,7 +225,7 @@ def process_sig_files(settings: PipelineSettings, logger: logging.Logger) -> Pat
             output_dir,
             instrument_value,
             instrument_name,
-            correction_type,
+            sensor_type,
             end_line_value,
         )
     )
@@ -323,7 +323,7 @@ def main() -> None:
         config_for_dir = dict(config)
         config_for_dir["sig_input_dir"] = str(input_dir)
 
-        _load_project_correction_types(config_for_dir, input_dir, repo_root, logger)
+        _load_sensor_calibrations(config_for_dir, input_dir, repo_root, logger)
         settings = build_settings(config_for_dir, repo_root=repo_root, verbose=args.verbose)
 
         summary_csv: Path | None

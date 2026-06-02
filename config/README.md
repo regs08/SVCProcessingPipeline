@@ -3,7 +3,7 @@
 Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_pipeline.py):
 
 1. **Run configs** (top-level files like [`config.json`](config.json)) — declare input/output paths and filenames for a pipeline run.
-2. **Calibration configs** ([`calibrations/`](calibrations/)) — map instrument correction types (e.g. `bronze`, `silver`) to the `.sig` end-line wavelength used by `SigFileProcessor` for truncation.
+2. **Sensor calibration configs** ([`calibrations/`](calibrations/)) — map sensor/instrument types (e.g. `bronze`, `silver`) to the `.sig` end-line wavelength used by `SigFileProcessor` for truncation.
 
 ## Run config schema
 
@@ -32,19 +32,20 @@ Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_p
 | `output_dir` | string | Top-level output root; resolved relative to the repo root when not absolute. |
 | `summary_csv_name` | string | Suffix for the per-run summary CSV. The actual filename is `<input_dir_name>_<summary_csv_name>`. |
 | `merged_csv_name` | string | Suffix for the resampler output CSV. Filename is `<input_dir_name>_<merged_csv_name>`. |
-| `end_line_overrides` | object | **Optional.** `{correction_type: end_line_value}` pairs that override the calibration file / built-in defaults. Keys are lower-cased. |
-| `correction_types_file` | string | **Optional.** Path (absolute or repo-relative) to a calibration JSON. Takes precedence over the auto-inferred file. |
+| `end_line_overrides` | object | **Optional.** `{sensor_type: end_line_value}` pairs that override the sensor calibration file / built-in defaults. Keys are lower-cased. |
+| `sensor_calibration_file` | string | **Optional.** Path (absolute or repo-relative) to a sensor calibration JSON. Takes precedence over the auto-inferred file. |
+| `correction_types_file` | string | **Optional legacy alias.** Older name for `sensor_calibration_file`; still supported for compatibility. |
 
-### Calibration loading order (in `run_pipeline.py`)
-1. `correction_types_file` in the run config, if present.
+### Sensor calibration loading order (in `run_pipeline.py`)
+1. `sensor_calibration_file` in the run config, if present. The legacy `correction_types_file` key is also accepted.
 2. Otherwise: `config/calibrations/<input_dir_name>.json`, if it exists.
 3. Otherwise: built-in defaults `{"bronze": "2520.4", "silver": "2517.9"}` from [`SigFileProcessor.DEFAULT_CORRECTION_TYPES`](../pipeline/sig_processor.py).
 
 `end_line_overrides` (run config) is then applied on top.
 
-## Calibration config schema (`calibrations/*.json`)
+## Sensor calibration config schema (`calibrations/*.json`)
 
-Plain `{correction_type: end_line_wavelength_string}` map:
+Plain `{sensor_type: end_line_wavelength_string}` map:
 
 ```json
 {
@@ -55,13 +56,13 @@ Plain `{correction_type: end_line_wavelength_string}` map:
 
 Keys are normalized to lower case. Values are strings representing the wavelength at which a `.sig` file's data section ends (`SigFileProcessor` writes lines up to and including the line that begins with this value).
 
-### Shipped calibration file
+### Shipped sensor calibration file
 
 - [`calibrations/72424_Crittenden_SVC_Bronze.json`](calibrations/72424_Crittenden_SVC_Bronze.json) — site/instrument-specific overrides for the 7/24/24 Crittenden Bronze run.
 
-To create a new calibration:
+To create a new sensor calibration:
 1. Drop a JSON file named `<input_dir_name>.json` into `calibrations/` to be picked up automatically, **or**
-2. Reference an arbitrary file from your run config via `"correction_types_file": "config/calibrations/<file>.json"`.
+2. Reference an arbitrary file from your run config via `"sensor_calibration_file": "config/calibrations/<file>.json"`.
 
 ## Notes
 - The shipped [`config.json`](config.json) uses placeholder `"<PATH_TO_SIG_INPUT_ROOT>"` — replace it locally; never commit machine paths.
