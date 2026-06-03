@@ -275,7 +275,17 @@ def _gaussian_resample(
 
 # ── public API ───────────────────────────────────────────────────────────────
 
-def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) -> Path:
+def resample_spectra(
+    input_dir: Path,
+    output_dir: Path,
+    output_filename: str,
+    *,
+    band_min: int = _BAND_MIN,
+    band_max: int = _BAND_MAX,
+    fwhm_nm: float = _FWHM_NM,
+    fixed_sensor: int = _FIXED_SENSOR,
+    interp_wvl: tuple = _INTERP_WVL,
+) -> Path:
     """Load .sig files, replicate spectrolab's pipeline, and write merged CSV.
 
     Pipeline (mirrors spectrolab exactly):
@@ -289,6 +299,13 @@ def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) ->
         input_dir:       Directory containing processed .sig files.
         output_dir:      Directory where the output CSV will be written.
         output_filename: File name for the output CSV.
+        band_min:        First wavelength of the output grid (default 400 nm).
+        band_max:        Last wavelength of the output grid (default 2500 nm).
+        fwhm_nm:         FWHM of the final Gaussian resample kernel (default 10 nm).
+        fixed_sensor:    1-based index of the sensor held fixed during match_sensors
+                         (default 2).  Changing this breaks R/spectrolab parity.
+        interp_wvl:      Half-window widths (nm) used around each splice for the
+                         match_sensors correction (default (5.0, 2.0)).
 
     Returns:
         Path to the written CSV.
@@ -301,7 +318,8 @@ def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) ->
     if not sig_files:
         raise ValueError(f"No .sig files found in {input_dir}")
 
-    target_wls = np.arange(_BAND_MIN, _BAND_MAX + 1, dtype=float)
+    sigma = fwhm_nm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    target_wls = np.arange(band_min, band_max + 1, dtype=float)
     rows: dict[str, np.ndarray] = {}
 
     for sig_path in sig_files:
@@ -318,9 +336,10 @@ def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) ->
             sensor_idx = _trim_and_assign(segments, wls, splices)
 
             # ── match_sensors ────────────────────────────────────────────────
-            fixed = min(_FIXED_SENSOR, len(segments))
+            fixed = min(fixed_sensor, len(segments))
             merged_wls, merged_rfs = _apply_match_sensors(
-                wls, rfs, sensor_idx, splices, fixed_sensor=fixed
+                wls, rfs, sensor_idx, splices,
+                fixed_sensor=fixed, interp_wvl=interp_wvl,
             )
         else:
             # Single-sensor file: no correction needed
@@ -331,7 +350,7 @@ def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) ->
         smoothed_rfs = _smooth_fwhm(merged_wls, merged_rfs)
 
         # ── resample(fwhm=10) — Gaussian-weighted to 400:2500 ────────────────
-        resampled = _gaussian_resample(merged_wls, smoothed_rfs, target_wls)
+        resampled = _gaussian_resample(merged_wls, smoothed_rfs, target_wls, sigma=sigma)
 
         # Sample name: strip .sig extension (matches specdal convention)
         sample_name = sig_path.stem

@@ -18,6 +18,16 @@ from pipeline.sig_processor import SigFileProcessor
 from pipeline.resampler import resample_spectra
 
 BUILTIN_SENSOR_CALIBRATIONS = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
+BUILTIN_INSTRUMENT_NUMBERS  = dict(SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS)
+
+# Parity-verified defaults — deviating from these invalidates the R/spectrolab parity claim.
+_PARITY_DEFAULTS: dict[str, object] = {
+    "band_min":          400,
+    "band_max":          2500,
+    "resample_fwhm_nm":  10.0,
+    "splice_interp_wvl": [5.0, 2.0],
+    "fixed_sensor":      2,
+}
 
 
 @dataclass(frozen=True)
@@ -30,6 +40,7 @@ class PipelineSettings:
     merged_csv_name: str
     end_line_overrides: dict[str, str]
     verbose: bool
+    processing_params: dict
 
 
 def _collect_summary_rows(
@@ -58,10 +69,15 @@ def _configure_logging(verbose: bool) -> logging.Logger:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    with path.expanduser().open() as handle:
-        data = json.load(handle)
+    try:
+        with path.expanduser().open() as handle:
+            data = json.load(handle)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Config file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Config is not valid JSON ({path}): {exc}") from exc
     if not isinstance(data, dict):
-        raise ValueError(f"Config must be a JSON object: {path}")
+        raise SystemExit(f"Config must be a JSON object: {path}")
     return data
 
 
@@ -72,6 +88,83 @@ def _resolve_under(base: Path, value: str) -> Path:
     return base / path_obj
 
 
+def _resolve_config(repo_root: Path, value: str) -> Path:
+    """Resolve a run-config argument with friendly fallbacks.
+
+    Tries, in order: the path as given (relative to repo root), the same name
+    under config/, and the same again with a .json suffix appended.
+    """
+    raw = Path(value).expanduser()
+    if raw.is_absolute():
+        candidates = [raw]
+    else:
+        names = [raw]
+        if raw.suffix == "":
+            names.append(raw.with_suffix(".json"))
+        candidates = []
+        for name in names:
+            candidates.append(repo_root / name)             # e.g. <repo>/config.json
+            candidates.append(repo_root / "config" / name)  # e.g. <repo>/config/config.json
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    available = sorted(p.name for p in (repo_root / "config").glob("*.json"))
+    raise SystemExit(
+        f"Config not found: '{value}'.\n"
+        f"  Tried: {', '.join(str(c) for c in candidates)}\n"
+        f"  Available in config/: {', '.join(available) or '(none)'}\n"
+        f"  Usage: python3 run_pipeline.py [CONFIG] [--step ...] [--verbose]"
+    )
+
+
+def _load_instrument_block(
+    config: dict[str, Any],
+    logger: logging.Logger,
+) -> bool:
+    """Apply the 'instrument' block from the run config (highest-priority calibration source).
+
+    Format:
+        "instrument": {
+            "bronze": {"end_line": "2520.4", "serial": "2212118"},
+            "silver": {"end_line": "2517.9", "serial": "1202103"}
+        }
+
+    Returns True if the block was present and applied.
+    """
+    block = config.get("instrument")
+    if not block:
+        return False
+
+    end_lines: dict[str, str] = {}
+    serials: dict[str, str] = {}
+    for sensor_type, values in block.items():
+        key = str(sensor_type).strip().lower()
+        if isinstance(values, dict):
+            if "end_line" in values:
+                end_lines[key] = str(values["end_line"]).strip()
+            if "serial" in values:
+                serials[key] = str(values["serial"]).strip()
+        else:
+            # Allow flat {"bronze": "2520.4"} as a shorthand
+            end_lines[key] = str(values).strip()
+
+    if end_lines:
+        SigFileProcessor.DEFAULT_CORRECTION_TYPES = {
+            **dict(BUILTIN_SENSOR_CALIBRATIONS),
+            **end_lines,
+        }
+        logger.info("Instrument end-lines from config: %s", end_lines)
+
+    if serials:
+        SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS = {
+            **dict(BUILTIN_INSTRUMENT_NUMBERS),
+            **serials,
+        }
+        logger.info("Instrument serials from config: %s", serials)
+
+    return True
+
+
 def _load_sensor_calibrations(
     config: dict[str, Any],
     input_dir: Path,
@@ -79,7 +172,13 @@ def _load_sensor_calibrations(
     logger: logging.Logger,
 ) -> None:
     SigFileProcessor.DEFAULT_CORRECTION_TYPES = dict(BUILTIN_SENSOR_CALIBRATIONS)
+    SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS = dict(BUILTIN_INSTRUMENT_NUMBERS)
 
+    # 1. instrument block in run config (highest priority)
+    if _load_instrument_block(config, logger):
+        return
+
+    # 2. explicit sensor_calibration_file in run config
     explicit = config.get("sensor_calibration_file") or config.get("correction_types_file")
     if explicit:
         sensor_calibration_path = _resolve_under(repo_root, str(explicit))
@@ -87,12 +186,41 @@ def _load_sensor_calibrations(
         logger.info("Loaded sensor calibration from %s", sensor_calibration_path.resolve())
         return
 
+    # 3. auto-inferred calibrations/<input_dir_name>.json
     inferred = repo_root / "config" / "calibrations" / f"{input_dir.name}.json"
     if inferred.exists():
         SigFileProcessor.load_default_correction_types(inferred)
         logger.info("Loaded sensor calibration from %s", inferred.resolve())
     else:
         logger.debug("No sensor calibration file found at %s; using built-in defaults.", inferred)
+
+
+def _load_processing_params(
+    config: dict[str, Any],
+    logger: logging.Logger,
+) -> dict[str, Any]:
+    """Read the optional 'processing' block and warn on any non-parity values."""
+    block = config.get("processing") or {}
+    params: dict[str, Any] = {}
+
+    for key, default in _PARITY_DEFAULTS.items():
+        if key in block:
+            value = block[key]
+            # Normalise list → tuple for interp_wvl
+            if isinstance(value, list):
+                value = tuple(value)
+            params[key] = value
+            default_cmp = tuple(default) if isinstance(default, list) else default
+            if value != default_cmp:
+                logger.warning(
+                    "processing.%s = %s differs from parity-verified default %s — "
+                    "R/spectrolab parity is no longer guaranteed.",
+                    key, value, default,
+                )
+        else:
+            params[key] = tuple(default) if isinstance(default, list) else default
+
+    return params
 
 
 def _expand_input_directories(config: dict[str, Any]) -> list[Path]:
@@ -122,7 +250,13 @@ def _expand_input_directories(config: dict[str, Any]) -> list[Path]:
     return subdirs or [base_dir]
 
 
-def build_settings(config: dict[str, Any], *, repo_root: Path, verbose: bool) -> PipelineSettings:
+def build_settings(
+    config: dict[str, Any],
+    *,
+    repo_root: Path,
+    verbose: bool,
+    processing_params: dict | None = None,
+) -> PipelineSettings:
     input_dir = Path(str(config["sig_input_dir"])).expanduser()
     source_name = input_dir.name or "sig_input"
 
@@ -153,6 +287,7 @@ def build_settings(config: dict[str, Any], *, repo_root: Path, verbose: bool) ->
         merged_csv_name=merged_csv_name,
         end_line_overrides=end_line_overrides,
         verbose=verbose,
+        processing_params=processing_params or {},
     )
 
 
@@ -269,7 +404,15 @@ def resample_with_python(
         logger.info("Starting Python resampler on %s", input_dir.resolve())
 
     logger.info("Running Python resampler: %s -> %s/%s", input_dir, output_dir, output_file)
-    merged_path = resample_spectra(input_dir, output_dir, output_file)
+    p = settings.processing_params
+    merged_path = resample_spectra(
+        input_dir, output_dir, output_file,
+        band_min=p.get("band_min", 400),
+        band_max=p.get("band_max", 2500),
+        fwhm_nm=p.get("resample_fwhm_nm", 10.0),
+        fixed_sensor=p.get("fixed_sensor", 2),
+        interp_wvl=p.get("splice_interp_wvl", (5.0, 2.0)),
+    )
 
     if merged_path.exists():
         logger.info("Merged spectra available at %s", merged_path.resolve())
@@ -282,10 +425,13 @@ def resample_with_python(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the SIG processing pipeline")
     parser.add_argument(
-        "--config",
-        default="config/weekly_data.json",
-        help="Path to the pipeline configuration file",
+        "config",
+        nargs="?",
+        default="config.json",
+        help="Run-config JSON. Bare names resolve under config/ (default: config.json).",
     )
+    # Deprecated alias — keep for one release so existing scripts/cron don't break.
+    parser.add_argument("--config", dest="config_flag", help=argparse.SUPPRESS)
     parser.add_argument(
         "--input-dir",
         help="Override the config's sig_input_dir and process only this directory.",
@@ -309,8 +455,30 @@ def main() -> None:
     repo_root = Path(__file__).resolve().parent
     logger = _configure_logging(args.verbose)
 
-    config_path = _resolve_under(repo_root, str(args.config))
+    config_arg = args.config
+    if getattr(args, "config_flag", None):
+        logger.warning(
+            "--config is deprecated; pass the config as a positional argument: "
+            "python3 run_pipeline.py %s",
+            args.config_flag,
+        )
+        config_arg = args.config_flag
+
+    config_path = _resolve_config(repo_root, str(config_arg))
     config = _load_json(config_path)
+    logger.info("Using config: %s", config_path)
+
+    PLACEHOLDER = "<PATH_TO_SIG_INPUT_ROOT>"
+    sig_input_dirs = config.get("sig_input_dirs") or []
+    if isinstance(sig_input_dirs, str):
+        sig_input_dirs = [sig_input_dirs]
+    raw_inputs = [config.get("sig_input_dir"), *sig_input_dirs]
+    if not args.input_dir and any(value == PLACEHOLDER for value in raw_inputs if value):
+        raise SystemExit(
+            f'{config_path} still contains the placeholder "{PLACEHOLDER}".\n'
+            f'  Edit "sig_input_dir" to point at your .sig data directory, '
+            f"or pass --input-dir <path>."
+        )
 
     if args.input_dir:
         input_dirs = [Path(str(args.input_dir)).expanduser()]
@@ -319,12 +487,19 @@ def main() -> None:
 
     overall_results: list[tuple[Path, dict[str, Path | None]]] = []
 
+    processing_params = _load_processing_params(config, logger)
+
     for input_dir in input_dirs:
         config_for_dir = dict(config)
         config_for_dir["sig_input_dir"] = str(input_dir)
 
         _load_sensor_calibrations(config_for_dir, input_dir, repo_root, logger)
-        settings = build_settings(config_for_dir, repo_root=repo_root, verbose=args.verbose)
+        settings = build_settings(
+            config_for_dir,
+            repo_root=repo_root,
+            verbose=args.verbose,
+            processing_params=processing_params,
+        )
 
         summary_csv: Path | None
         if args.step in {"1", "all"}:

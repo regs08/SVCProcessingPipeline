@@ -7,7 +7,7 @@ Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_p
 
 ## Run config schema
 
-`run_pipeline.py` loads the run config via `--config <path>` (default at the CLI level is `config/weekly_data.json`, but the shipped template is [`config.json`](config.json) — pass it explicitly).
+`run_pipeline.py` takes the run config as a positional argument (default `config/config.json`); bare names resolve under `config/`, so `config.json`, `config`, and `config/config.json` all work. The shipped template is [`config.json`](config.json).
 
 ```json
 {
@@ -36,10 +36,52 @@ Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_p
 | `sensor_calibration_file` | string | **Optional.** Path (absolute or repo-relative) to a sensor calibration JSON. Takes precedence over the auto-inferred file. |
 | `correction_types_file` | string | **Optional legacy alias.** Older name for `sensor_calibration_file`; still supported for compatibility. |
 
+### `instrument` block (optional)
+
+Inline instrument configuration — supersedes all other calibration sources when present.
+
+```json
+"instrument": {
+  "bronze": { "end_line": "2520.4", "serial": "2212118" },
+  "silver": { "end_line": "2517.9", "serial": "1202103" }
+}
+```
+
+| Sub-key | Meaning |
+|---|---|
+| `end_line` | Wavelength string at which `SigFileProcessor` truncates the `.sig` data section. |
+| `serial` | Instrument serial number used for consistency checking. |
+
+Both sub-keys are optional. A flat shorthand `{"bronze": "2520.4"}` (end-line value only) is also accepted.  
+Add or rename keys to register additional sensor types beyond `bronze` / `silver`.
+
+### `processing` block (optional)
+
+Algorithm parameters for Stage 2 (`resample_spectra`). All keys are optional; omitting a key uses the parity-verified default. **Changing any value from its default invalidates the R/`spectrolab` parity claim** — a warning is logged at runtime.
+
+```json
+"processing": {
+  "band_min": 400,
+  "band_max": 2500,
+  "resample_fwhm_nm": 10.0,
+  "splice_interp_wvl": [5.0, 2.0],
+  "fixed_sensor": 2
+}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `band_min` | `400` | First wavelength (nm) of the output 1 nm grid. |
+| `band_max` | `2500` | Last wavelength (nm) of the output 1 nm grid. |
+| `resample_fwhm_nm` | `10.0` | FWHM (nm) of the final Gaussian resample kernel (spectrolab `resample(fwhm=10)`). |
+| `splice_interp_wvl` | `[5.0, 2.0]` | Half-window (nm) around each splice boundary used by `match_sensors` (spectrolab `interpolate_wvl`). |
+| `fixed_sensor` | `2` | 1-based index of the sensor held fixed during `match_sensors` (spectrolab `fixed_sensor`). |
+
 ### Sensor calibration loading order (in `run_pipeline.py`)
-1. `sensor_calibration_file` in the run config, if present. The legacy `correction_types_file` key is also accepted.
-2. Otherwise: `config/calibrations/<input_dir_name>.json`, if it exists.
-3. Otherwise: built-in defaults `{"bronze": "2520.4", "silver": "2517.9"}` from [`SigFileProcessor.DEFAULT_CORRECTION_TYPES`](../pipeline/sig_processor.py).
+1. `instrument` block in the run config, if present — **highest priority**.
+2. `sensor_calibration_file` in the run config, if present. The legacy `correction_types_file` key is also accepted.
+3. Otherwise: `config/calibrations/<input_dir_name>.json`, if it exists.
+4. Otherwise: built-in defaults `{"bronze": "2520.4", "silver": "2517.9"}` from [`SigFileProcessor.DEFAULT_CORRECTION_TYPES`](../pipeline/sig_processor.py).
 
 `end_line_overrides` (run config) is then applied on top.
 
@@ -49,16 +91,12 @@ Plain `{sensor_type: end_line_wavelength_string}` map:
 
 ```json
 {
-  "bronze": "2520.5",
+  "bronze": "2520.4",
   "silver": "2517.9"
 }
 ```
 
 Keys are normalized to lower case. Values are strings representing the wavelength at which a `.sig` file's data section ends (`SigFileProcessor` writes lines up to and including the line that begins with this value).
-
-### Shipped sensor calibration file
-
-- [`calibrations/72424_Crittenden_SVC_Bronze.json`](calibrations/72424_Crittenden_SVC_Bronze.json) — site/instrument-specific overrides for the 7/24/24 Crittenden Bronze run.
 
 To create a new sensor calibration:
 1. Drop a JSON file named `<input_dir_name>.json` into `calibrations/` to be picked up automatically, **or**

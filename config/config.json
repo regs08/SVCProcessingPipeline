@@ -6,5 +6,18 @@
   "output_dir": "pipeline_outputs",
   "summary_csv_name": "processed_sig_summary.csv",
   "merged_csv_name": "merged_spectra.csv",
-  "end_line_overrides": {}
+  "end_line_overrides": {},
+
+  "instrument": {
+    "bronze": { "end_line": "2520.4", "serial": "2212118" },
+    "silver": { "end_line": "2517.9", "serial": "1202103" }
+  },
+
+  "processing": {
+    "band_min": 400,
+    "band_max": 2500,
+    "resample_fwhm_nm": 10.0,
+    "splice_interp_wvl": [5.0, 2.0],
+    "fixed_sensor": 2
+  }
 }
