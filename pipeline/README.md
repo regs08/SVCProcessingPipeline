@@ -1,8 +1,26 @@
 # `pipeline/` — Core Python Package
 
-Pure-Python building blocks for the SVC HR-1024i SIG processing pipeline. Every stage of the pipeline lives in this package; `run_pipeline.py` at the repository root is a thin orchestrator over the modules below.
+Pure-Python building blocks for the SVC HR-1024i SIG processing pipeline. Every stage lives in this package; [`run_pipeline.py`](../run_pipeline.py) at the repository root is a 14-line shim that calls [`cli.main()`](cli.py). The CLI layer (`cli` → `run_config` → `runner`) wires the run config to the two science modules (`sig_processor`, `resampler`).
 
 ## Modules
+
+### [`cli.py`](cli.py) — command-line interface (`main`)
+Thin glue, no config or processing logic of its own: parses arguments, configures logging, and for each input directory wires a `RunConfig` to a `Pipeline`. Also runnable as `python3 -m pipeline.cli`.
+
+### [`run_config.py`](run_config.py) — `RunConfig`, `PipelineSettings`
+Encapsulates *what to run*. `RunConfig.load(repo_root, name, logger)` resolves the config path (bare names fall back under [`config/`](../config/) and gain a `.json` suffix), parses + validates the JSON, and exposes:
+
+- `.ensure_no_placeholder(input_dir_override)` — abort with guidance if the template's `<PATH_TO_SIG_INPUT_ROOT>` was never edited.
+- `.input_directories()` — expand `sig_input_dir` / `sig_input_dirs` / `process_all_subdirs` into the directories to process.
+- `.apply_sensor_calibrations(input_dir)` — set `SigFileProcessor`'s active end-line/serial tables (priority: inline `instrument` block > `sensor_calibration_file` > `config/calibrations/<dir>.json` > built-in defaults).
+- `.processing_params()` — the `processing` block merged over the parity-verified defaults (cached; warns once on any non-parity value).
+- `.settings_for(input_dir, *, verbose)` — build the per-directory `PipelineSettings` (a frozen dataclass of resolved input/output paths + `processing_params`).
+
+### [`runner.py`](runner.py) — `Pipeline`
+Encapsulates *doing the work*. `Pipeline(settings, logger).run(step)` runs Stage 1 and/or Stage 2 and returns `{"summary_csv": …, "merged_csv": …}`:
+
+- `.process_sig_files()` — Stage 1: instrument-consistency check, truncate each `.sig` at the calibration end-line, write the summary CSV.
+- `.resample(summary_csv)` — Stage 2: call `resample_spectra` with the config's `processing_params`.
 
 ### [`sig_processor.py`](sig_processor.py) — `SigFileProcessor`
 Truncates and inspects raw `.sig` ASCII files emitted by the SVC HR-1024i instrument.

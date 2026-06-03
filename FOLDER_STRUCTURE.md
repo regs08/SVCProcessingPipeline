@@ -8,13 +8,16 @@ Authoritative map of the repository. Every directory has its own `README.md` des
 svcProcessingPipeline/
 ├── README.md                       # Project entry point (start here)
 ├── FOLDER_STRUCTURE.md             # This file
-├── run_pipeline.py                 # CLI orchestrator (only top-level script)
+├── run_pipeline.py                 # Thin entry point → pipeline.cli:main (only top-level script)
 ├── requirements.txt                # Python deps: specdal, pandas, numpy, scipy, pytest
 ├── .gitignore                      # Excludes data/, pipeline_outputs/, *.sig, naming_ids/, …
 │
 ├── pipeline/                       # Core Python package — see pipeline/README.md
 │   ├── README.md
 │   ├── __init__.py                 # (empty marker)
+│   ├── cli.py                      # CLI glue: parse args, wire RunConfig → Pipeline
+│   ├── run_config.py               # RunConfig — load run config + build PipelineSettings
+│   ├── runner.py                   # Pipeline — run the processing + resampling stages
 │   ├── sig_processor.py            # SigFileProcessor — truncate & inspect .sig files
 │   ├── resampler.py                # resample_spectra() — pure-Python R replacement
 │   └── processor.py                # SVCDataProcessor / SigSpectraAverager / GroupSpec
