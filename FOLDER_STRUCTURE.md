@@ -27,9 +27,8 @@ svcProcessingPipeline/
 │
 ├── config/                         # Run + calibration configs — see config/README.md
 │   ├── README.md
-│   ├── config.json                 # Run-config template (placeholders for local paths)
-│   └── calibrations/
-│       └── 72424_Crittenden_SVC_Bronze.json
+│   ├── config.json                 # Run-config template (instrument + processing + paths)
+│   └── calibrations/               # Optional per-run sensor calibration JSONs (auto-inferred)
 │
 ├── docs/                           # Manuscript-grade docs — see docs/README.md
 │   ├── README.md
@@ -41,9 +40,11 @@ svcProcessingPipeline/
 │   ├── README.md
 │   └── merge_resample_sig.R        # Pipeline A (spectrolab) — used to regenerate parity CSV
 │
-├── notebooks/                      # Exploratory notebooks — see notebooks/README.md
-│   ├── README.md
-│   ├── sig_spectra_visualization.ipynb        # tracked
+├── notebooks/                      # Exploratory notebooks (not on the production path)
+│   ├── pipeline_demo.ipynb                     # tracked — end-to-end pipeline demo
+│   ├── pipeline_demo/                          # helper package for the demo notebook
+│   │   ├── __init__.py
+│   │   └── svc.py
 │   ├── weekly_sig_spectra_visualization.ipynb # gitignored
 │   └── spectral_change_analysis.ipynb         # gitignored
 │
@@ -65,7 +66,7 @@ svcProcessingPipeline/
 5. **[tests/README.md](tests/README.md)** — how correctness is verified.
 6. **[archived_r_scripts/README.md](archived_r_scripts/README.md)** — the R reference, kept for parity verification only.
 7. **[docs/README.md](docs/README.md)** + parity reports — historical evidence and the LLM-driven re-test workflow.
-8. **[notebooks/README.md](notebooks/README.md)** and **[naming_ids/README.md](naming_ids/README.md)** — analysis-side conveniences; not on the production hot path.
+8. **[notebooks/pipeline_demo.ipynb](notebooks/pipeline_demo.ipynb)** and **[naming_ids/README.md](naming_ids/README.md)** — analysis-side conveniences; not on the production hot path.
 
 ## Gitignored paths (do not commit)
 

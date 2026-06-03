@@ -71,9 +71,9 @@ Instrument correction type (silver, white, blue, etc.) if known:
      - Report any warnings.
 
 2. Run Pipeline B (Python) end-to-end on NEW_SIG_DIR:
-     - Either invoke `python run_pipeline.py --input-dir <NEW_SIG_DIR> --step all`
-       with an appropriate config (use `config/weekly_data.json` as the
-       template, adjusting `sig_input_dir` if needed), OR
+     - Either invoke `python3 run_pipeline.py config.json --input-dir <NEW_SIG_DIR> --step all`
+       (the shipped `config.json` template is used; `--input-dir` overrides its
+       `sig_input_dir` directly), OR
      - Call `pipeline.resampler.resample_spectra(processed_dir, out_dir,
        "python_merged.csv")` directly on already-processed `.sig` files.
      - Capture the resulting CSV path.

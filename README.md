@@ -16,7 +16,7 @@ A pure-Python pipeline for processing SVC HR-1024i field hyperspectral `.sig` fi
 | [`config/`](config/) | Run configs + instrument calibration JSONs. | [`config/README.md`](config/README.md) |
 | [`docs/`](docs/) | Manuscript-grade methods, parity reports, LLM re-test prompt. | [`docs/README.md`](docs/README.md) |
 | [`archived_r_scripts/`](archived_r_scripts/) | Frozen R/`spectrolab` reference (Pipeline A) — kept only for parity verification. | [`archived_r_scripts/README.md`](archived_r_scripts/README.md) |
-| [`notebooks/`](notebooks/) | Exploratory & visualization notebooks (not on the production path). | [`notebooks/README.md`](notebooks/README.md) |
+| [`notebooks/`](notebooks/) | Exploratory & visualization notebooks (not on the production path). | [`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) |
 | [`naming_ids/`](naming_ids/) | Private CSV lookup tables for grouping scans into samples (gitignored). | [`naming_ids/README.md`](naming_ids/README.md) |
 | [`FOLDER_STRUCTURE.md`](FOLDER_STRUCTURE.md) | Authoritative tree + reading order. | — |
 
@@ -32,7 +32,7 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 # Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
-python run_pipeline.py --config config/config.json --verbose
+python3 run_pipeline.py config.json
 ```
 
 Outputs land under `pipeline_outputs/` by default. See [`config/README.md`](config/README.md) for every supported key.
@@ -82,17 +82,15 @@ For the formal algorithmic spec (every constant, every formula), read [`docs/sup
 ## Running the pipeline
 
 ```bash
-python run_pipeline.py --config config/config.json [options]
+python3 run_pipeline.py [config] [options]
 ```
 
-| Option | Meaning |
+| Argument | Meaning |
 |---|---|
-| `--config <path>` | Path to a run-config JSON. See [`config/README.md`](config/README.md) for schema. |
+| `config` | Run-config JSON (positional, optional; default `config/config.json`). Bare names resolve under `config/`, so `config.json`, `config`, and `config/config.json` are equivalent. See [`config/README.md`](config/README.md) for schema. |
 | `--input-dir <path>` | Override `sig_input_dir` and process only this directory. |
 | `--step {1,2,all}` | `1` = process + summary CSV only; `2` = resample only (requires Stage 1 to have been run); `all` = both (default). |
 | `--verbose` | Print INFO/DEBUG logs before and after each stage. |
-
-The CLI default for `--config` is `config/weekly_data.json`; the shipped template is [`config/config.json`](config/config.json), so always pass `--config` explicitly unless you've created the weekly file locally.
 
 ### Expected output layout
 
