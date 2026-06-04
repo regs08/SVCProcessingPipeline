@@ -8,7 +8,7 @@ Tracked notebook assets:
 | [`pipeline_demo/`](pipeline_demo/) | Helper package and external demo-data manifest used by the demo notebook. |
 
 The demo notebook is intentionally separate from the production path. Production
-processing enters through `run_pipeline.py`, `pipeline.cli`, and the modules in
+processing enters through `svc-pipeline`, `pipeline.cli`, and the modules in
 `pipeline/`.
 
 Raw `.sig` demo files are external and ignored by Git. Prepare them with:

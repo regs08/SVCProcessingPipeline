@@ -110,7 +110,7 @@ class RunConfig:
             f"Config not found: '{value}'.\n"
             f"  Tried: {', '.join(str(c) for c in candidates)}\n"
             f"  Available in config/: {', '.join(available) or '(none)'}\n"
-            f"  Usage: python3 run_pipeline.py [CONFIG] [--step ...] [--verbose]"
+            f"  Usage: svc-pipeline [CONFIG] [--step ...] [--verbose]"
         )
 
     @staticmethod
@@ -215,7 +215,7 @@ class RunConfig:
         if self._apply_instrument_block():
             return
 
-        explicit = self.data.get("sensor_calibration_file") or self.data.get("correction_types_file")
+        explicit = self.data.get("sensor_calibration_file")
         if explicit:
             path = _resolve_under(self.repo_root, str(explicit))
             SigFileProcessor.load_default_correction_types(path)

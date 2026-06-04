@@ -8,12 +8,9 @@ Authoritative map of the repository. Every directory has its own `README.md` des
 svcProcessingPipeline/
 ├── README.md                       # Project entry point (start here)
 ├── FOLDER_STRUCTURE.md             # This file
-├── run_pipeline.py                 # Thin entry point → pipeline.cli:main (only top-level script)
-├── pyproject.toml                  # Package metadata, console script, ruff config
-├── requirements.txt                # Lightweight install deps for legacy workflows
-├── requirements-lock-py39.txt      # Exact validated top-level environment snapshot
+├── pyproject.toml                  # Package metadata, svc-pipeline console script, ruff config
 ├── .gitignore                      # Excludes data/, pipeline_outputs/, *.sig, naming_ids/, …
-├── .github/workflows/ci.yml        # Compile + ruff + pytest on Python 3.9 / 3.11
+├── .github/workflows/ci.yml        # Compile + ruff + pytest on Python 3.11
 ├── scripts/
 │   └── prepare_demo_data.py        # Copy/download and verify external demo .sig files
 │

@@ -1,11 +1,14 @@
 # `pipeline/` — Core Python Package
 
-Pure-Python building blocks for the SVC HR-1024i SIG processing pipeline. Every stage lives in this package; [`run_pipeline.py`](../run_pipeline.py) at the repository root is a 14-line shim that calls [`cli.main()`](cli.py). The CLI layer (`cli` → `run_config` → `runner`) wires the run config to the two science modules (`sig_processor`, `resampler`).
+Pure-Python building blocks for the SVC HR-1024i SIG processing pipeline. Every
+stage lives in this package; the `svc-pipeline` console script calls
+[`cli.main()`](cli.py). The CLI layer (`cli` -> `run_config` -> `runner`) wires
+the run config to the two science modules (`sig_processor`, `resampler`).
 
 ## Modules
 
 ### [`cli.py`](cli.py) — command-line interface (`main`)
-Thin glue, no config or processing logic of its own: parses arguments, configures logging, and for each input directory wires a `RunConfig` to a `Pipeline`. Also runnable as `python3 -m pipeline.cli`.
+Thin glue, no config or processing logic of its own: parses arguments, configures logging, and for each input directory wires a `RunConfig` to a `Pipeline`. Installed as `svc-pipeline`.
 
 ### [`run_config.py`](run_config.py) — `RunConfig`, `PipelineSettings`
 Encapsulates *what to run*. `RunConfig.load(repo_root, name, logger)` resolves the config path (bare names fall back under [`config/`](../config/) and gain a `.json` suffix), parses + validates the JSON, and exposes:
@@ -60,7 +63,8 @@ Public entry points:
 Constants (top of module): `_FWHM_NM = 10.0`, `_SIGMA_NM = _FWHM_NM / 2.355`, `_INTERP_WVL = (5.0, 2.0)`, `_FIXED_SENSOR = 2`, `_BAND_MIN = 400`, `_BAND_MAX = 2500`. Do not edit these without re-running the parity test in [`tests/`](../tests/).
 
 ### [`processor.py`](processor.py) — `SVCDataProcessor`, `SigSpectraAverager`, `GroupSpec`, `find_spectra_by_name`
-Post-resampling utilities for grouping and averaging spectra. Not invoked by `run_pipeline.py`; intended for use in notebooks and ad-hoc analysis.
+Post-resampling utilities for grouping and averaging spectra. Not invoked by the
+production CLI; intended for use in notebooks and ad-hoc analysis.
 
 - **`GroupSpec(members, name=None)`** — frozen dataclass describing one group of scans. `GroupSpec.from_csv(path, …)` loads a list of group specs from a [`naming_ids/`](../naming_ids/) CSV (`scan_id` / `scans` and `name` columns); rows named `reference` are skipped automatically.
 - **`SVCDataProcessor`** — chainable processor:

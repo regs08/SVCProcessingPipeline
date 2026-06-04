@@ -2,7 +2,7 @@
 
 ## Prerequisites
 - GitHub repo connected to this project
-- Python 3.9+
+- Python 3.11
 - Account on [pypi.org](https://pypi.org)
 
 ---
@@ -21,7 +21,7 @@ name = "svc-processing-pipeline"
 version = "0.1.0"
 description = "SVC hyperspectral processing pipeline"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "numpy",
     "pandas",
@@ -50,7 +50,7 @@ from pipeline.processor import GroupSpec, SVCDataProcessor, SigSpectraAverager
 ### Step 3 — Test the local install
 
 ```bash
-pip install -e ".[dev,demo]"
+python3.11 -m pip install -e ".[dev,demo]"
 python -c "import pipeline; print('ok')"
 svc-pipeline --help
 ```

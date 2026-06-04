@@ -10,8 +10,8 @@ A pure-Python pipeline for processing SVC HR-1024i field hyperspectral `.sig` fi
 
 | Path | Purpose | Read me first |
 |---|---|---|
-| [`run_pipeline.py`](run_pipeline.py) | CLI orchestrator (the only top-level script). | This file ↓ |
-| [`pipeline/`](pipeline/) | Core Python package: `SigFileProcessor`, `resample_spectra`, `SVCDataProcessor`. | [`pipeline/README.md`](pipeline/README.md) |
+| [`pyproject.toml`](pyproject.toml) | Package metadata and `svc-pipeline` console script. | This file ↓ |
+| [`pipeline/`](pipeline/) | Core Python package: CLI, `SigFileProcessor`, `resample_spectra`, `SVCDataProcessor`. | [`pipeline/README.md`](pipeline/README.md) |
 | [`tests/`](tests/) | Pytest suite, including the R-vs-Python parity test. | [`tests/README.md`](tests/README.md) |
 | [`config/`](config/) | Run configs + instrument calibration JSONs. | [`config/README.md`](config/README.md) |
 | [`docs/`](docs/) | Manuscript-grade methods, parity reports, LLM re-test prompt. | [`docs/README.md`](docs/README.md) |
@@ -27,14 +27,11 @@ Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeli
 ## Quick start
 
 ```bash
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev,demo]"
 
 # Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
-python3 run_pipeline.py config.json
-
-# Or, after editable install:
 svc-pipeline config.json
 ```
 
@@ -76,7 +73,11 @@ Outputs land under `pipeline_outputs/` by default. See [`config/README.md`](conf
    └────────────────────────────────────┘
 ```
 
-[`run_pipeline.py`](run_pipeline.py) glues Stages 1 and 2 together; Stage 3 is invoked from notebooks against the Stage 2 output. The pipeline is **single-pass and idempotent per input directory** — previous processed `.sig` files in the target directory are deleted at the start of each run.
+The `svc-pipeline` console script glues Stages 1 and 2 together through
+`pipeline.cli`; Stage 3 is invoked from notebooks against the Stage 2 output.
+The pipeline is **single-pass and idempotent per input directory** — previous
+processed `.sig` files in the target directory are deleted at the start of each
+run.
 
 For the formal algorithmic spec (every constant, every formula), read [`docs/supplementary_methods.md`](docs/supplementary_methods.md). That document — not this README — is the source of truth for *what* the code does.
 
@@ -85,7 +86,7 @@ For the formal algorithmic spec (every constant, every formula), read [`docs/sup
 ## Running the pipeline
 
 ```bash
-python3 run_pipeline.py [config] [options]
+svc-pipeline [config] [options]
 ```
 
 | Argument | Meaning |
@@ -176,16 +177,14 @@ See [`notebooks/pipeline_demo/README.md`](notebooks/pipeline_demo/README.md).
 
 ## Requirements
 
-Python ≥ 3.9 (CI targets 3.9 and 3.11). Runtime dependencies are declared in
-[`pyproject.toml`](pyproject.toml); [`requirements.txt`](requirements.txt) is
-kept as a lightweight install file for existing workflows.
+Python 3.11 is the supported runtime. Runtime, demo, and development
+dependencies are declared in [`pyproject.toml`](pyproject.toml).
 
 - `numpy`, `scipy`, `pandas` — numerical core.
 - `matplotlib` — demo notebook plotting.
 - `pytest>=8.3.0` — test runner for local verification.
 
-The validated local environment snapshot is
-[`requirements-lock-py39.txt`](requirements-lock-py39.txt). The runtime package
-also exposes the console script `svc-pipeline = "pipeline.cli:main"`.
+Install with `python -m pip install -e ".[dev,demo]"` for local development and
+use `svc-pipeline = "pipeline.cli:main"` as the command-line entry point.
 
 R is **not** required for the production pipeline. It is needed only to regenerate Pipeline A parity references; see [`archived_r_scripts/README.md`](archived_r_scripts/README.md).

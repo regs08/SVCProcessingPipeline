@@ -8,7 +8,7 @@ two collaborators together for each input directory —
 * :class:`~pipeline.runner.Pipeline` — runs the processing + resampling stages
   (*do the work*).
 
-Invoke it via ``python3 run_pipeline.py [config]`` (or ``python3 -m pipeline.cli``).
+Invoke it as ``svc-pipeline [config]`` after installation.
 """
 
 from __future__ import annotations
@@ -38,8 +38,6 @@ def _parse_args() -> argparse.Namespace:
         default="config.json",
         help="Run-config JSON. Bare names resolve under config/ (default: config.json).",
     )
-    # Deprecated alias — keep for one release so existing scripts/cron don't break.
-    parser.add_argument("--config", dest="config_flag", help=argparse.SUPPRESS)
     parser.add_argument(
         "--input-dir",
         help="Override the config's sig_input_dir and process only this directory.",
@@ -62,16 +60,7 @@ def main() -> None:
     args = _parse_args()
     logger = _configure_logging(args.verbose)
 
-    config_arg = args.config
-    if getattr(args, "config_flag", None):
-        logger.warning(
-            "--config is deprecated; pass the config as a positional argument: "
-            "python3 run_pipeline.py %s",
-            args.config_flag,
-        )
-        config_arg = args.config_flag
-
-    run_config = RunConfig.load(_REPO_ROOT, str(config_arg), logger)
+    run_config = RunConfig.load(_REPO_ROOT, str(args.config), logger)
     run_config.ensure_no_placeholder(args.input_dir)
 
     if args.input_dir:

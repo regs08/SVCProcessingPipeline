@@ -7,5 +7,4 @@ pipeline entry points.
 |---|---|
 | [`prepare_demo_data.py`](prepare_demo_data.py) | Copy, download, and verify the external `.sig` files used by the demo notebook. |
 
-Production processing should still use `run_pipeline.py` or the installed
-`svc-pipeline` console script.
+Production processing should use the installed `svc-pipeline` console script.

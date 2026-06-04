@@ -1,14 +1,14 @@
 # `config/` — Pipeline Configuration
 
-Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_pipeline.py)
-or the installed `svc-pipeline` console script:
+Two distinct file types live here, both consumed by the installed
+`svc-pipeline` console script:
 
 1. **Run configs** (top-level files like [`config.json`](config.json)) — declare input/output paths and filenames for a pipeline run.
 2. **Sensor calibration configs** ([`calibrations/`](calibrations/)) — map sensor/instrument types (e.g. `bronze`, `silver`) to the `.sig` end-line wavelength used by `SigFileProcessor` for truncation.
 
 ## Run config schema
 
-`run_pipeline.py` takes the run config as a positional argument (default
+`svc-pipeline` takes the run config as a positional argument (default
 `config/config.json`); bare names resolve under `config/`, so `config.json`,
 `config`, and `config/config.json` all work. The shipped template is
 [`config.json`](config.json).
@@ -38,7 +38,6 @@ or the installed `svc-pipeline` console script:
 | `merged_csv_name` | string | Suffix for the resampler output CSV. Filename is `<input_dir_name>_<merged_csv_name>`. |
 | `end_line_overrides` | object | **Optional.** `{sensor_type: end_line_value}` pairs that override the sensor calibration file / built-in defaults. Keys are lower-cased. |
 | `sensor_calibration_file` | string | **Optional.** Path (absolute or repo-relative) to a sensor calibration JSON. Takes precedence over the auto-inferred file. |
-| `correction_types_file` | string | **Optional legacy alias.** Older name for `sensor_calibration_file`; still supported for compatibility. |
 
 ### `instrument` block (optional)
 
@@ -81,9 +80,9 @@ Algorithm parameters for Stage 2 (`resample_spectra`). All keys are optional; om
 | `splice_interp_wvl` | `[5.0, 2.0]` | Half-window (nm) around each splice boundary used by `match_sensors` (spectrolab `interpolate_wvl`). |
 | `fixed_sensor` | `2` | 1-based index of the sensor held fixed during `match_sensors` (spectrolab `fixed_sensor`). |
 
-### Sensor calibration loading order (in `run_pipeline.py`)
+### Sensor calibration loading order
 1. `instrument` block in the run config, if present — **highest priority**.
-2. `sensor_calibration_file` in the run config, if present. The legacy `correction_types_file` key is also accepted.
+2. `sensor_calibration_file` in the run config, if present.
 3. Otherwise: `config/calibrations/<input_dir_name>.json`, if it exists.
 4. Otherwise: built-in defaults `{"bronze": "2520.4", "silver": "2517.9"}` from [`SigFileProcessor.DEFAULT_CORRECTION_TYPES`](../pipeline/sig_processor.py).
 
