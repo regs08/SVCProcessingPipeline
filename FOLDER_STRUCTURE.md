@@ -9,8 +9,13 @@ svcProcessingPipeline/
 ├── README.md                       # Project entry point (start here)
 ├── FOLDER_STRUCTURE.md             # This file
 ├── run_pipeline.py                 # Thin entry point → pipeline.cli:main (only top-level script)
-├── requirements.txt                # Python deps: specdal, pandas, numpy, scipy, pytest
+├── pyproject.toml                  # Package metadata, console script, ruff config
+├── requirements.txt                # Lightweight install deps for legacy workflows
+├── requirements-lock-py39.txt      # Exact validated top-level environment snapshot
 ├── .gitignore                      # Excludes data/, pipeline_outputs/, *.sig, naming_ids/, …
+├── .github/workflows/ci.yml        # Compile + ruff + pytest on Python 3.9 / 3.11
+├── scripts/
+│   └── prepare_demo_data.py        # Copy/download and verify external demo .sig files
 │
 ├── pipeline/                       # Core Python package — see pipeline/README.md
 │   ├── README.md
@@ -26,15 +31,21 @@ svcProcessingPipeline/
 │   ├── README.md
 │   ├── __init__.py
 │   ├── conftest.py                 # --r-reference-csv / --r-input-dir options + fixtures
-│   └── test_resampler_parity.py    # R-vs-Python numerical parity test (1e-3 tolerance)
+│   ├── fixtures/sig_inputs/        # Compact synthetic .sig fixtures, not field data
+│   ├── test_resampler_parity.py    # R-vs-Python numerical parity test (1e-3 tolerance)
+│   └── test_*.py                   # Focused unit tests for config, runner, helpers, grouping
 │
 ├── config/                         # Run + calibration configs — see config/README.md
 │   ├── README.md
 │   ├── config.json                 # Run-config template (instrument + processing + paths)
 │   └── calibrations/               # Optional per-run sensor calibration JSONs (auto-inferred)
+│       └── README.md
 │
 ├── docs/                           # Manuscript-grade docs — see docs/README.md
 │   ├── README.md
+│   ├── code_audit_2026-06-03.md    # Architecture/code-quality audit
+│   ├── code_audit_plan_2026-06-03.md
+│   ├── pip_packaging_guide.md
 │   ├── supplementary_methods.md    # Canonical algorithm spec (cite this)
 │   ├── parity_a4any_sb_2025-cn_ch-svc-aviris_bottom_2026-05-27.md
 │   └── parity_retest_prompt.md     # LLM prompt for re-running parity on new data
@@ -43,17 +54,21 @@ svcProcessingPipeline/
 │   ├── README.md
 │   └── merge_resample_sig.R        # Pipeline A (spectrolab) — used to regenerate parity CSV
 │
-├── notebooks/                      # Exploratory notebooks (not on the production path)
+├── notebooks/                      # Demo/analysis notebooks (not on the production path)
+│   ├── README.md
 │   ├── pipeline_demo.ipynb                     # tracked — end-to-end pipeline demo
 │   ├── pipeline_demo/                          # helper package for the demo notebook
 │   │   ├── __init__.py
+│   │   ├── README.md
+│   │   ├── demo_data_manifest.json             # external raw-data manifest
+│   │   ├── demo_data/                          # tracked README, ignored raw .sig target
 │   │   └── svc.py
 │   ├── weekly_sig_spectra_visualization.ipynb # gitignored
 │   └── spectral_change_analysis.ipynb         # gitignored
 │
 ├── naming_ids/                     # Sample-grouping lookup CSVs — see naming_ids/README.md
-│   ├── README.md                   # (gitignored directory; README documents the schema)
-│   └── *.csv                       # Per-date scan-id → group-name tables (private)
+│   ├── README.md                   # tracked schema documentation
+│   └── *.csv                       # gitignored per-date scan-id → group-name tables (private)
 │
 └── pipeline_outputs/               # Generated at runtime (gitignored)
     ├── sig_processed/<run>/        # Truncated .sig files + *_processed_sig_summary.csv
@@ -76,8 +91,9 @@ svcProcessingPipeline/
 - `.venv/`, `__pycache__/`, `*.py[cod]`, `.pytest_cache/`, `.ruff_cache/`
 - `.env`, `.env.*`
 - `pipeline_outputs/`, `sig_processed/`, `sig_resampled/`, `data/`
-- `*.sig`, `*processed_sig_summary.csv`, `*merged_spectra.csv`
-- `naming_ids/`
+- `*.sig`, except synthetic fixtures under `tests/fixtures/`
+- `*processed_sig_summary.csv`, `*merged_spectra.csv`
+- `naming_ids/*.csv`
 - `notebooks/spectral_change_analysis.ipynb`, `notebooks/weekly_sig_spectra_visualization.ipynb`
 - macOS / log clutter: `.DS_Store`, `logs/`, `*.log`, `*.tmp`
 

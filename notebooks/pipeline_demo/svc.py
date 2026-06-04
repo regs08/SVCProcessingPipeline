@@ -7,30 +7,76 @@ single, obvious purpose and uses descriptive variable names throughout.
 
 from __future__ import annotations
 
-import sys
+import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Make the project root importable regardless of where the notebook is opened
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_PROJECT_ROOT))
-
-from pipeline.resampler import (
-    _read_sig,
-    _sensor_segment_indices,
-    _guess_splice_at,
-    _trim_and_assign,
-    _apply_match_sensors,
-    _smooth_fwhm,
-    _gaussian_resample,
-)
+from pipeline.resampler import ProcessedSpectrum, process_sig_file
 from pipeline.processor import SigSpectraAverager
 
 # Standard output wavelength grid used by the pipeline (matches spectrolab)
 STANDARD_WAVELENGTHS = np.arange(400, 2501, dtype=float)
+DEFAULT_MANIFEST_PATH = Path(__file__).with_name("demo_data_manifest.json")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_demo_data(
+    spectra_dir: str | Path,
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> Path:
+    """
+    Verify that the external demo .sig files are present and checksum-clean.
+
+    Returns the resolved spectra directory. Raises a setup-oriented exception
+    before the notebook reaches plotting or grouping cells.
+    """
+    spectra_dir = Path(spectra_dir)
+    manifest_path = Path(manifest_path)
+    with manifest_path.open() as handle:
+        manifest = json.load(handle)
+
+    missing: list[str] = []
+    mismatched: list[str] = []
+    for item in manifest["files"]:
+        path = spectra_dir / item["name"]
+        if not path.exists():
+            missing.append(item["name"])
+            continue
+        if path.stat().st_size != int(item["size_bytes"]):
+            mismatched.append(f"{item['name']} size")
+            continue
+        if _sha256(path) != item["sha256"]:
+            mismatched.append(f"{item['name']} sha256")
+
+    if missing:
+        raise FileNotFoundError(
+            "Demo .sig data are missing. Raw files are external and intentionally "
+            "not tracked because headers contain GPS/location metadata.\n"
+            f"Missing files: {', '.join(missing[:5])}"
+            f"{' ...' if len(missing) > 5 else ''}\n"
+            "Prepare them with: python3 scripts/prepare_demo_data.py "
+            "--source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom"
+        )
+    if mismatched:
+        raise RuntimeError(
+            "Demo .sig data failed manifest verification. Re-run "
+            "scripts/prepare_demo_data.py or replace the external artifact.\n"
+            f"Mismatches: {', '.join(mismatched[:5])}"
+            f"{' ...' if len(mismatched) > 5 else ''}"
+        )
+
+    return spectra_dir
 
 
 # ── Single spectrum ────────────────────────────────────────────────────────────
@@ -53,14 +99,12 @@ class Spectrum:
         self.name = path.stem
         self.filepath = path
 
-        raw_wavelengths, raw_reflectance = _read_sig(path)
-        self._raw_wavelengths = raw_wavelengths
-        self._raw_reflectance = raw_reflectance
+        self._processed_result: ProcessedSpectrum = process_sig_file(path)
+        self._raw_wavelengths = self._processed_result.raw_wavelengths
+        self._raw_reflectance = self._processed_result.raw_reflectance
 
-        segments = _sensor_segment_indices(raw_wavelengths)
-        self.sensor_count = len(segments)
-        self.splice_wavelengths = _guess_splice_at(segments, raw_wavelengths)
-        self._segments = segments
+        self.sensor_count = len(self._processed_result.segments)
+        self.splice_wavelengths = list(self._processed_result.splice_wavelengths)
 
         # Populated by process()
         self.wavelengths: np.ndarray | None = None
@@ -97,25 +141,11 @@ class Spectrum:
         3. Gaussian smooth with per-band bandwidth
         4. Gaussian resample to 400 – 2500 nm at 1 nm spacing
         """
-        sensor_indices = _trim_and_assign(
-            self._segments, self._raw_wavelengths, self.splice_wavelengths
-        )
-        corrected_wavelengths, corrected_reflectance = _apply_match_sensors(
-            self._raw_wavelengths,
-            self._raw_reflectance,
-            sensor_indices,
-            self.splice_wavelengths,
-            fixed_sensor=min(2, self.sensor_count),
-        )
-        self._corrected_wavelengths = corrected_wavelengths
-        self._corrected_reflectance = corrected_reflectance
-
-        smoothed_reflectance = _smooth_fwhm(corrected_wavelengths, corrected_reflectance)
-
-        self.wavelengths = STANDARD_WAVELENGTHS.copy()
-        self.reflectance = _gaussian_resample(
-            corrected_wavelengths, smoothed_reflectance, STANDARD_WAVELENGTHS
-        )
+        result = self._processed_result
+        self._corrected_wavelengths = result.corrected_wavelengths
+        self._corrected_reflectance = result.corrected_reflectance
+        self.wavelengths = result.output_wavelengths.copy()
+        self.reflectance = result.output_reflectance.copy()
         self.is_processed = True
         return self
 
@@ -688,8 +718,6 @@ def plot_index_comparison(
     fig, axes = plt.subplots(1, number_of_indices, figsize=(4.5 * number_of_indices, 5))
     if number_of_indices == 1:
         axes = [axes]
-
-    bar_colors = [("saddlebrown", label_a), ("forestgreen", label_b)]
 
     for ax, index_name in zip(axes, index_names):
         values = [indices_a[index_name], indices_b[index_name]]

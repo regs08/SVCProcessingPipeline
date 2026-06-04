@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and dev tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev,demo]"
+
+      - name: Compile tracked Python files
+        run: |
+          export PYTHONPYCACHEPREFIX="${RUNNER_TEMP}/pycache"
+          python -m py_compile $(git ls-files '*.py')
+
+      - name: Ruff
+        run: python -m ruff check .
+
+      - name: Pytest
+        run: python -m pytest -q
+
+      - name: Notebook smoke test when demo data are present
+        env:
+          MPLBACKEND: Agg
+        run: |
+          if find notebooks/pipeline_demo/demo_data/spectra -maxdepth 1 -name '*.sig' | grep -q .; then
+            python -m nbconvert --to notebook --execute \
+              --ExecutePreprocessor.timeout=600 \
+              notebooks/pipeline_demo.ipynb \
+              --output /tmp/demo_run.ipynb
+          else
+            echo "Skipping notebook execution: external demo .sig files are not present."
+          fi

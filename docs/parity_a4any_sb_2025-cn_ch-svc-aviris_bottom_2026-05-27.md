@@ -4,7 +4,7 @@
 
 | Property                     | Value                                                                        |
 |------------------------------|------------------------------------------------------------------------------|
-| Source folder                | `/Users/nr466/Downloads/a4any_sb_2025-cn_ch-svc-aviris_bottom`               |
+| Source dataset               | `a4any_sb_2025-cn_ch-svc-aviris_bottom` (external `.sig` artifact; raw files not tracked because headers may contain GPS/location metadata) |
 | `.sig` file count            | 15                                                                           |
 | Instrument header            | `HI: 2212118 (HR-1024i)`                                                     |
 | Instrument serial            | 2212118                                                                      |
@@ -78,6 +78,6 @@ range (0.028 to 1.002), consistent with valid SVC reflectance products.
 | NumPy       | 2.0.2            |
 | SciPy       | 1.13.1           |
 | pandas      | 2.3.0+4.g1dfc98e16a |
-| specdal     | (no `__version__` attribute exposed; pinned in `requirements.txt`) |
+| specdal     | Not used by Pipeline B runtime |
 | R           | 4.5.1            |
 | spectrolab  | 0.0.19           |

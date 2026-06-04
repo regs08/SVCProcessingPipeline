@@ -1,13 +1,17 @@
 # `config/` — Pipeline Configuration
 
-Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_pipeline.py):
+Two distinct file types live here, both consumed by [`run_pipeline.py`](../run_pipeline.py)
+or the installed `svc-pipeline` console script:
 
 1. **Run configs** (top-level files like [`config.json`](config.json)) — declare input/output paths and filenames for a pipeline run.
 2. **Sensor calibration configs** ([`calibrations/`](calibrations/)) — map sensor/instrument types (e.g. `bronze`, `silver`) to the `.sig` end-line wavelength used by `SigFileProcessor` for truncation.
 
 ## Run config schema
 
-`run_pipeline.py` takes the run config as a positional argument (default `config/config.json`); bare names resolve under `config/`, so `config.json`, `config`, and `config/config.json` all work. The shipped template is [`config.json`](config.json).
+`run_pipeline.py` takes the run config as a positional argument (default
+`config/config.json`); bare names resolve under `config/`, so `config.json`,
+`config`, and `config/config.json` all work. The shipped template is
+[`config.json`](config.json).
 
 ```json
 {
@@ -105,4 +109,4 @@ To create a new sensor calibration:
 ## Notes
 - The shipped [`config.json`](config.json) uses placeholder `"<PATH_TO_SIG_INPUT_ROOT>"` — replace it locally; never commit machine paths.
 - Output directories are created on demand; existing processed `.sig` files in the target directory are deleted at the start of each run.
-- Built-in instrument numbers (`bronze: 2212118`, `silver: 1202103`) come from [`SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS`](../pipeline/sig_processor.py) and are not configurable via these files.
+- Built-in instrument numbers (`bronze: 2212118`, `silver: 1202103`) come from [`SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS`](../pipeline/sig_processor.py). They can be overridden for a run with the optional `instrument` block; calibration JSON files only map sensor type to truncation end-line.

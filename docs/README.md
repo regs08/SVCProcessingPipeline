@@ -24,6 +24,15 @@ A formal parity report for a specific dataset (15 Bronze-instrument samples). Do
 ### [`parity_retest_prompt.md`](parity_retest_prompt.md)
 A self-contained LLM prompt that drives a parity re-test for a new dataset. Includes the algorithmic spec (steps 1–6 of the pipeline), the expected statistics, the steps the LLM must perform (run Pipeline B, obtain Pipeline A reference, run [`tests/test_resampler_parity.py`](../tests/test_resampler_parity.py), compute statistics, produce a Markdown report), and tone/style rules ("formal scientific English; do not modify pipeline source"). Copy this verbatim into any capable coding LLM to regenerate a `parity_<dataset>_<date>.md`.
 
+### [`code_audit_2026-06-03.md`](code_audit_2026-06-03.md)
+Full architecture and code-quality audit that motivated the remediation work.
+The companion [`code_audit_plan_2026-06-03.md`](code_audit_plan_2026-06-03.md)
+records the audit execution plan and evidence-gathering phases.
+
+### [`pip_packaging_guide.md`](pip_packaging_guide.md)
+Packaging and release notes for the current `pyproject.toml` layout and
+`svc-pipeline` console script.
+
 ## Conventions
 - Parity reports are named `parity_<dataset_folder_name>_<YYYY-MM-DD>.md`.
 - Statistics are reported in scientific notation with two significant figures (e.g. `1.1e-6`).

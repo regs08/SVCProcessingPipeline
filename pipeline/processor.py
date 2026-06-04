@@ -98,6 +98,11 @@ class SVCDataProcessor:
     SAMPLE_NAME_PATTERN = re.compile(r"^(?P<base>.+?)\.(?P<num>\d+)(?:\.sig)?$", re.IGNORECASE)
     TRAILING_DIGITS_PATTERN = re.compile(r"^(?P<base>.*?)(?P<num>\d+)(?:\.sig)?$", re.IGNORECASE)
 
+    def _require_attributes(self, *names: str, message: str) -> None:
+        missing = [name for name in names if not hasattr(self, name)]
+        if missing:
+            raise RuntimeError(message)
+
     # ---------- IO ----------
     def load_csv(self, file_path: str, **kwargs):
         """Load CSV file. Pass any additional pandas.read_csv() arguments via kwargs."""
@@ -106,7 +111,7 @@ class SVCDataProcessor:
 
     # ---------- Structure ----------
     def split_columns(self, name_col: Optional[str] = None):
-        assert hasattr(self, "df"), "Call load_csv first."
+        self._require_attributes("df", message="Call load_csv first.")
         self.name_col: str = name_col or self.df.columns[0]
         num_cols = self.df.select_dtypes(include='number').columns.tolist()
         xlike_cols = [c for c in self.df.columns if isinstance(c, str) and c.startswith("X")]
@@ -152,7 +157,7 @@ class SVCDataProcessor:
         return target
 
     def extract_sig_entries(self):
-        assert hasattr(self, "df") and hasattr(self, "name_col"), "Call split_columns first."
+        self._require_attributes("df", "name_col", message="Call split_columns first.")
         names = self.df[self.name_col].astype(str).tolist()
         out = []
         for i, n in enumerate(names):
@@ -178,9 +183,9 @@ class SVCDataProcessor:
         return (g,) if isinstance(g, int) else g
 
     def group_by(self, groups: Sequence[Union[int, Iterable[int]]], *, by: Literal["number", "index"] = "number"):
-        assert hasattr(self, "entries"), "Call extract_sig_entries first."
+        self._require_attributes("entries", message="Call extract_sig_entries first.")
 
-        def _simple_warn_format(message, category, filename, lineno, line=None):
+        def _simple_warn_format(message, category, filename, _lineno, _line=None):
             return f"{category.__name__}: {message}\n"
         warnings.formatwarning = _simple_warn_format
 
@@ -304,7 +309,13 @@ class SVCDataProcessor:
         agg_method: Literal["mean", "median", "sum", "min", "max"] = "mean",
         override_names: Optional[Sequence[Optional[str]]] = None,
     ):
-        assert hasattr(self, "df") and hasattr(self, "grouped_entries") and hasattr(self, "wavelength_cols") and hasattr(self, "name_col"), "Run previous steps first."
+        self._require_attributes(
+            "df",
+            "grouped_entries",
+            "wavelength_cols",
+            "name_col",
+            message="Run previous steps first.",
+        )
 
         use_cols = self._select_numeric_cols(self.df, cols or self.wavelength_cols)
         name_col = self.name_col
@@ -364,10 +375,17 @@ class SVCDataProcessor:
         index_base: int = 1
     ):
         """Stack self.grouped_df with ungrouped entries (raw spectra or empty spectral cells)."""
-        assert hasattr(self, "grouped_df"), "Call average_groups first."
-        assert hasattr(self, "ungrouped_entries"), "Call group_by first to populate ungrouped_entries."
-        assert hasattr(self, "df") and hasattr(self, "wavelength_cols") and hasattr(self, "name_col"), \
-            "Ensure load_csv/split_columns ran."
+        self._require_attributes("grouped_df", message="Call average_groups first.")
+        self._require_attributes(
+            "ungrouped_entries",
+            message="Call group_by first to populate ungrouped_entries.",
+        )
+        self._require_attributes(
+            "df",
+            "wavelength_cols",
+            "name_col",
+            message="Ensure load_csv/split_columns ran.",
+        )
 
         grouped = self.grouped_df.copy()
 
@@ -393,7 +411,7 @@ class SVCDataProcessor:
     # ---------- Pretty prints ----------
     def debug_print_groups(self):
         """Print groups and ungrouped entries with clear headers and spacing."""
-        assert hasattr(self, "grouped_entries"), "Call group_by first."
+        self._require_attributes("grouped_entries", message="Call group_by first.")
 
         print("#### Group Entries ####\n")
         print("Number of groups:", len(self.grouped_entries), "\n")
@@ -417,7 +435,7 @@ class SVCDataProcessor:
 
     # ---------- Save ----------
     def save_csv(self, out_path: str):
-        assert hasattr(self, "grouped_df"), "Call average_groups first."
+        self._require_attributes("grouped_df", message="Call average_groups first.")
         self.grouped_df.to_csv(out_path, index=False)
         return self
 

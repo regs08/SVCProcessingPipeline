@@ -16,12 +16,14 @@ notebooks/spectral_change_analysis.ipynb
 notebooks/weekly_sig_spectra_visualization.ipynb
 
 # Pipeline artifacts (keep private data out of the repo)
-naming_ids/
+naming_ids/*
+!naming_ids/README.md
 data/
 pipeline_outputs/
 sig_processed/
 sig_resampled/
 *.sig
+!tests/fixtures/**/*.sig
 *processed_sig_summary.csv
 *merged_spectra.csv
 

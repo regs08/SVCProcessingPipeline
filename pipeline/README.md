@@ -35,7 +35,7 @@ Truncates and inspects raw `.sig` ASCII files emitted by the SVC HR-1024i instru
 
 The class instance never holds spectral data; it streams files line-by-line and writes to disk. Safe to instantiate per directory.
 
-### [`resampler.py`](resampler.py) — `resample_spectra(input_dir, output_dir, output_filename)`
+### [`resampler.py`](resampler.py) — `process_sig_file(...)`, `resample_spectra(...)`
 Pure-Python replacement for the archived R/`spectrolab` resampling script. Replicates the exact algorithm of `read_spectra → guess_splice_at → match_sensors → smooth → resample(fwhm=10)`:
 
 1. **`_read_sig(path)`** — parses the `data=` section of a `.sig` file. Column 4 (target reflectance %) is divided by 100 to give fractional reflectance. Exact-duplicate wavelengths at sensor boundaries are perturbed by `1.2357e-5 × min(|diff(non-duplicate bands)|)` (mirrors `spectrolab::i_bands`).
@@ -46,7 +46,16 @@ Pure-Python replacement for the archived R/`spectrolab` resampling script. Repli
 6. **`_smooth_fwhm(wls, rfs)`** — resolution-matched Gaussian smoothing with per-band FWHM derived from local band spacing, k-means quantized into 3 clusters (one per sensor), then doubled. Matches `spectrolab::smooth_fwhm`.
 7. **`_gaussian_resample(wls, rfs, target, sigma)`** — Gaussian-weighted resampling onto `400:2500` at 1 nm spacing with FWHM = 10 nm (`σ ≈ 4.25 nm`).
 
-Output: a CSV at `output_dir / output_filename` with rows = sample names (`.sig` stem), columns = integer wavelengths 400–2500. Returns the `Path` to the written file.
+Public entry points:
+
+- `process_sig_file(path, ...)` returns a frozen `ProcessedSpectrum` dataclass
+  containing the raw arrays, sensor/splice diagnostics, corrected arrays, output
+  wavelengths, and output reflectance for one file. This is the supported API for
+  notebooks or demos that need intermediate arrays.
+- `resample_spectra(input_dir, output_dir, output_filename, ...)` processes every
+  `.sig` file in a directory and writes a CSV at `output_dir / output_filename`
+  with rows = sample names (`.sig` stem), columns = integer wavelengths 400–2500.
+  It delegates to `process_sig_file()` and returns the `Path` to the written file.
 
 Constants (top of module): `_FWHM_NM = 10.0`, `_SIGMA_NM = _FWHM_NM / 2.355`, `_INTERP_WVL = (5.0, 2.0)`, `_FIXED_SENSOR = 2`, `_BAND_MIN = 400`, `_BAND_MAX = 2500`. Do not edit these without re-running the parity test in [`tests/`](../tests/).
 

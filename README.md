@@ -16,8 +16,8 @@ A pure-Python pipeline for processing SVC HR-1024i field hyperspectral `.sig` fi
 | [`config/`](config/) | Run configs + instrument calibration JSONs. | [`config/README.md`](config/README.md) |
 | [`docs/`](docs/) | Manuscript-grade methods, parity reports, LLM re-test prompt. | [`docs/README.md`](docs/README.md) |
 | [`archived_r_scripts/`](archived_r_scripts/) | Frozen R/`spectrolab` reference (Pipeline A) — kept only for parity verification. | [`archived_r_scripts/README.md`](archived_r_scripts/README.md) |
-| [`notebooks/`](notebooks/) | Exploratory & visualization notebooks (not on the production path). | [`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) |
-| [`naming_ids/`](naming_ids/) | Private CSV lookup tables for grouping scans into samples (gitignored). | [`naming_ids/README.md`](naming_ids/README.md) |
+| [`notebooks/`](notebooks/) | Demo and visualization notebooks (not on the production path). | [`notebooks/README.md`](notebooks/README.md) |
+| [`naming_ids/`](naming_ids/) | Private CSV lookup tables for grouping scans into samples; only the schema README is tracked. | [`naming_ids/README.md`](naming_ids/README.md) |
 | [`FOLDER_STRUCTURE.md`](FOLDER_STRUCTURE.md) | Authoritative tree + reading order. | — |
 
 Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeline_outputs/sig_resampled/<run>/`.
@@ -33,6 +33,9 @@ python -m pip install -r requirements.txt
 
 # Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
 python3 run_pipeline.py config.json
+
+# Or, after editable install:
+svc-pipeline config.json
 ```
 
 Outputs land under `pipeline_outputs/` by default. See [`config/README.md`](config/README.md) for every supported key.
@@ -134,7 +137,7 @@ The most-used entry points (all importable from their concrete modules — `pipe
 
 ```python
 from pipeline.sig_processor import SigFileProcessor   # truncation + instrument inspection
-from pipeline.resampler      import resample_spectra  # Stage-2 entry point
+from pipeline.resampler      import process_sig_file, resample_spectra
 from pipeline.processor      import (
     SVCDataProcessor,      # chainable load/group/average
     SigSpectraAverager,    # facade — pass a DataFrame, get aggregated DataFrame back
@@ -157,12 +160,32 @@ Detailed signatures and behavioural notes in [`pipeline/README.md`](pipeline/REA
 
 ---
 
+## Demo Notebook
+
+The demo notebook uses an external 15-file `.sig` artifact because raw headers
+contain GPS/location metadata. Prepare local demo data with:
+
+```bash
+python3 scripts/prepare_demo_data.py \
+  --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+```
+
+See [`notebooks/pipeline_demo/README.md`](notebooks/pipeline_demo/README.md).
+
+---
+
 ## Requirements
 
-Python ≥ 3.9 (used: 3.9 / 3.11). Dependencies pinned at the major-version level in [`requirements.txt`](requirements.txt):
+Python ≥ 3.9 (CI targets 3.9 and 3.11). Runtime dependencies are declared in
+[`pyproject.toml`](pyproject.toml); [`requirements.txt`](requirements.txt) is
+kept as a lightweight install file for existing workflows.
 
 - `numpy`, `scipy`, `pandas` — numerical core.
-- `specdal` — kept for historical compatibility; not used by `resample_spectra`.
-- `pytest>=8.3.0` — test runner.
+- `matplotlib` — demo notebook plotting.
+- `pytest>=8.3.0` — test runner for local verification.
+
+The validated local environment snapshot is
+[`requirements-lock-py39.txt`](requirements-lock-py39.txt). The runtime package
+also exposes the console script `svc-pipeline = "pipeline.cli:main"`.
 
 R is **not** required for the production pipeline. It is needed only to regenerate Pipeline A parity references; see [`archived_r_scripts/README.md`](archived_r_scripts/README.md).

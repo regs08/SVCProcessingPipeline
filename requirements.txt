@@ -1,5 +1,5 @@
-specdal
-pandas
 numpy
 scipy
+pandas
+matplotlib
 pytest>=8.3.0

@@ -12,6 +12,7 @@ module reads .sig files directly.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -49,7 +50,7 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
     with open(path) as fh:
         lines = fh.readlines()
 
-    data_start = next(i for i, l in enumerate(lines) if l.strip() == "data=")
+    data_start = next(i for i, line in enumerate(lines) if line.strip() == "data=")
     wls, rfs = [], []
     for line in lines[data_start + 1:]:
         parts = line.split()
@@ -126,7 +127,6 @@ def _trim_and_assign(
     Returns a list of (wavelength_indices, sensor_id) per sensor, matching the
     order used by match_sensors.
     """
-    n_sensors = len(segments)
     # Build per-sensor index arrays
     sensor_idx = [np.arange(s, e) for s, e in segments]
 
@@ -275,6 +275,72 @@ def _gaussian_resample(
 
 # ── public API ───────────────────────────────────────────────────────────────
 
+@dataclass(frozen=True)
+class ProcessedSpectrum:
+    """All intermediate arrays and diagnostics produced for one .sig file."""
+
+    sample_name: str
+    raw_wavelengths: np.ndarray
+    raw_reflectance: np.ndarray
+    segments: tuple[tuple[int, int], ...]
+    splice_wavelengths: tuple[float, ...]
+    corrected_wavelengths: np.ndarray
+    corrected_reflectance: np.ndarray
+    output_wavelengths: np.ndarray
+    output_reflectance: np.ndarray
+
+
+def _sigma_from_fwhm(fwhm_nm: float) -> float:
+    """Convert full width at half maximum to Gaussian sigma."""
+    return fwhm_nm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+
+def process_sig_file(
+    path: Path,
+    *,
+    band_min: int = _BAND_MIN,
+    band_max: int = _BAND_MAX,
+    fwhm_nm: float = _FWHM_NM,
+    fixed_sensor: int = _FIXED_SENSOR,
+    interp_wvl: tuple[float, ...] = _INTERP_WVL,
+) -> ProcessedSpectrum:
+    """Process one .sig file through the parity-verified resampling path."""
+    sig_path = Path(path)
+    wls, rfs = _read_sig(sig_path)
+
+    segments = _sensor_segment_indices(wls)
+    splices: list[float] = []
+
+    if len(segments) > 1:
+        splices = _guess_splice_at(segments, wls)
+        sensor_idx = _trim_and_assign(segments, wls, splices)
+        fixed = min(fixed_sensor, len(segments))
+        merged_wls, merged_rfs = _apply_match_sensors(
+            wls, rfs, sensor_idx, splices,
+            fixed_sensor=fixed, interp_wvl=interp_wvl,
+        )
+    else:
+        merged_wls = wls
+        merged_rfs = rfs
+
+    smoothed_rfs = _smooth_fwhm(merged_wls, merged_rfs)
+    target_wls = np.arange(band_min, band_max + 1, dtype=float)
+    sigma = _sigma_from_fwhm(fwhm_nm)
+    resampled = _gaussian_resample(merged_wls, smoothed_rfs, target_wls, sigma=sigma)
+
+    return ProcessedSpectrum(
+        sample_name=sig_path.stem,
+        raw_wavelengths=wls,
+        raw_reflectance=rfs,
+        segments=tuple(segments),
+        splice_wavelengths=tuple(splices),
+        corrected_wavelengths=merged_wls,
+        corrected_reflectance=merged_rfs,
+        output_wavelengths=target_wls,
+        output_reflectance=resampled,
+    )
+
+
 def resample_spectra(
     input_dir: Path,
     output_dir: Path,
@@ -318,43 +384,19 @@ def resample_spectra(
     if not sig_files:
         raise ValueError(f"No .sig files found in {input_dir}")
 
-    sigma = fwhm_nm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
     target_wls = np.arange(band_min, band_max + 1, dtype=float)
     rows: dict[str, np.ndarray] = {}
 
     for sig_path in sig_files:
-        wls, rfs = _read_sig(sig_path)
-
-        # ── detect sensor segments ──────────────────────────────────────────
-        segments = _sensor_segment_indices(wls)
-
-        if len(segments) > 1:
-            # ── guess_splice_at ─────────────────────────────────────────────
-            splices = _guess_splice_at(segments, wls)
-
-            # ── i_trim_sensor_overlap ────────────────────────────────────────
-            sensor_idx = _trim_and_assign(segments, wls, splices)
-
-            # ── match_sensors ────────────────────────────────────────────────
-            fixed = min(fixed_sensor, len(segments))
-            merged_wls, merged_rfs = _apply_match_sensors(
-                wls, rfs, sensor_idx, splices,
-                fixed_sensor=fixed, interp_wvl=interp_wvl,
-            )
-        else:
-            # Single-sensor file: no correction needed
-            merged_wls = wls
-            merged_rfs = rfs
-
-        # ── smooth() — Gaussian smooth matching spectrolab smooth(method='gaussian')
-        smoothed_rfs = _smooth_fwhm(merged_wls, merged_rfs)
-
-        # ── resample(fwhm=10) — Gaussian-weighted to 400:2500 ────────────────
-        resampled = _gaussian_resample(merged_wls, smoothed_rfs, target_wls, sigma=sigma)
-
-        # Sample name: strip .sig extension (matches specdal convention)
-        sample_name = sig_path.stem
-        rows[sample_name] = resampled
+        processed = process_sig_file(
+            sig_path,
+            band_min=band_min,
+            band_max=band_max,
+            fwhm_nm=fwhm_nm,
+            fixed_sensor=fixed_sensor,
+            interp_wvl=interp_wvl,
+        )
+        rows[processed.sample_name] = processed.output_reflectance
 
     df = pd.DataFrame(rows, index=target_wls.astype(int)).T
     df.index.name = "sample_name"
