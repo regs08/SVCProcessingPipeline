@@ -1,6 +1,6 @@
 # `archived_r_scripts/` — Legacy R Reference Implementation
 
-R/`spectrolab` source preserved for reference and for regenerating Pipeline A outputs when running a new parity verification. **Not invoked by the production pipeline**, which is now 100 % Python ([`pipeline/resampler.py`](../pipeline/resampler.py)).
+The original R driver script, preserved for reference and for regenerating Pipeline A outputs when running a new parity verification. It **calls** the `spectrolab` package but contains none of its source. **Not invoked by the production pipeline**, which is now 100 % Python ([`pipeline/resampler.py`](../pipeline/resampler.py)).
 
 ## Files
 
@@ -38,7 +38,7 @@ Comment block at the top records the two known instrument serials:
 
 ## Requirements
 - R ≥ 4.3 (parity reports were produced under R 4.5.1).
-- `spectrolab` (0.0.18 / 0.0.19 verified) — Meireles et al., 2020, *JOSS*, 5(53), 2526. <https://doi.org/10.21105/joss.02526>
+- `spectrolab` (0.0.18 / 0.0.19 verified), distributed under **GPL-3** — Meireles JE, Schweiger A, Cavender-Bares J (2017). *spectrolab: Class and Methods for Spectral Data in R.* R package. doi:[10.5281/zenodo.3934575](https://doi.org/10.5281/zenodo.3934575). <https://CRAN.R-project.org/package=spectrolab>
 - `readr` (only for `write_csv`).
 
 ## Do not edit

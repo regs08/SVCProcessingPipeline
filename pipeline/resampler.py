@@ -3,6 +3,14 @@
 Faithfully replicates the spectrolab R pipeline:
     read_spectra  →  guess_splice_at  →  match_sensors  →  smooth  →  resample(fwhm=10)
 
+This is an independent reimplementation of the *algorithm* published in the
+spectrolab R package (GPL-3; Meireles, Schweiger & Cavender-Bares, 2017,
+doi:10.5281/zenodo.3934575).  It contains no spectrolab source code — only the
+algorithm was reimplemented in NumPy/SciPy and verified numerically against
+spectrolab output.  spectrolab internal function names cited in the docstrings
+below (e.g. i_bands, i_make_fwhm) describe what each step replicates; they are
+references, not copied code.
+
 SVC .sig files store multiple sensor segments sequentially in one file, separated
 by backward wavelength jumps.  spectrolab detects these segments and applies a
 linearly-varying multiplicative correction per segment so that the sensors match

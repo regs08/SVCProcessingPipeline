@@ -1,0 +1,40 @@
+name: Publish to PyPI
+
+# Fires when a version tag (e.g. v0.1.0) is pushed, or on manual dispatch.
+#
+# Authentication: this repository lives on GitHub Enterprise Server, where PyPI
+# Trusted Publishing (OIDC) is NOT available — that feature only trusts
+# github.com. So we authenticate with a PyPI API token instead. Before the
+# first release, add the token as a repository secret:
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#   Name: PYPI_API_TOKEN   Value: the token from pypi.org (starts with "pypi-")
+#
+# The runner must be able to reach pypi.org and pull the pypa publish action.
+# If your GHES runners cannot do that, publish manually instead:
+#   python -m build && python -m twine upload dist/*
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

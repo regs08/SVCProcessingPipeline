@@ -19,6 +19,8 @@ A pure-Python pipeline for processing SVC HR-1024i field hyperspectral `.sig` fi
 | [`notebooks/`](notebooks/) | Demo and visualization notebooks (not on the production path). | [`notebooks/README.md`](notebooks/README.md) |
 | [`naming_ids/`](naming_ids/) | Private CSV lookup tables for grouping scans into samples; only the schema README is tracked. | [`naming_ids/README.md`](naming_ids/README.md) |
 | [`FOLDER_STRUCTURE.md`](FOLDER_STRUCTURE.md) | Authoritative tree + reading order. | — |
+| [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md) | Attribution, third-party licenses, and citation. | — |
+| [`LICENSE`](LICENSE) | MIT license. | — |
 
 Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeline_outputs/sig_resampled/<run>/`.
 
@@ -188,3 +190,19 @@ Install with `python -m pip install -e ".[dev,demo]"` for local development and
 use `svc-pipeline = "pipeline.cli:main"` as the command-line entry point.
 
 R is **not** required for the production pipeline. It is needed only to regenerate Pipeline A parity references; see [`archived_r_scripts/README.md`](archived_r_scripts/README.md).
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Cole Regnier. The distributed
+package (`pipeline/`) is original work and bundles no third-party source code.
+
+---
+
+## Acknowledgments & Citation
+
+This project is an independent reimplementation of the **spectrolab** algorithm
+(no source copied) and builds on prior field-spectroscopy work. See
+[`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md) for full attribution, third-party
+licenses, and how to cite this software and spectrolab.
