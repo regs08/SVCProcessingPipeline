@@ -20,6 +20,7 @@ module reads .sig files directly.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +36,7 @@ _INTERP_WVL      = (5.0, 2.0)                # spectrolab interpolate_wvl defaul
 _FIXED_SENSOR    = 2                          # spectrolab fixed_sensor when 2 splices
 _BAND_MIN        = 400
 _BAND_MAX        = 2500
+_N_SENSORS       = 3                          # HR-1024i has three detectors → three sweeps
 
 
 # ── .sig file reader ─────────────────────────────────────────────────────────
@@ -54,6 +56,17 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
         correction = 1.2357e-05 * min(|diff(non_duplicate_bands)|)
     This causes the sensor overlap trimming logic to keep both the last band of
     sensor N and the first band of sensor N+1 when their nominal wavelengths match.
+
+    Trailing junk rows
+    ------------------
+    A correct SVC HR-1024i scan is exactly three sweeps (one per detector), so the
+    data section should contain three ascending segments. Some exported .sig files
+    carry corrupt extra rows after those three sweeps -- e.g. a stray sample near
+    "5 nm" or a duplicated fragment of an earlier detector. Left in place these show
+    up as spurious diagonal/horizontal lines in raw plots and skew reference-panel
+    detection. We therefore keep only the first three segments and drop anything
+    after them, warning so the bad file is not silently trimmed (see
+    ``_drop_trailing_junk``). Well-formed files are unaffected.
     """
     with open(path) as fh:
         lines = fh.readlines()
@@ -71,6 +84,8 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
     wls_arr = np.array(wls, dtype=float)
     rfs_arr = np.array(rfs, dtype=float)
+
+    wls_arr, rfs_arr = _drop_trailing_junk(wls_arr, rfs_arr, source=path)
 
     # Replicate spectrolab i_bands(): add a tiny correction to exact duplicates
     seen: dict[float, bool] = {}
@@ -104,6 +119,73 @@ def _sensor_segment_indices(wls: np.ndarray) -> list[tuple[int, int]]:
     starts = np.concatenate([[0], decreases])
     ends   = np.concatenate([decreases, [len(wls)]])
     return list(zip(starts.tolist(), ends.tolist()))
+
+
+def _drop_trailing_junk(
+    wls: np.ndarray,
+    rfs: np.ndarray,
+    *,
+    source: Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Discard corrupt rows that some .sig exports append after a valid scan.
+
+    Background for non-SVC readers
+    ------------------------------
+    The SVC HR-1024i has three detectors (VNIR + two SWIR). Each detector sweeps
+    from a low wavelength up to a high one, so a correct .sig file lays the data
+    out as exactly three runs of increasing wavelength, one after another:
+
+        detector 1:  ~339 -> 1010 nm
+        detector 2:  ~971 -> 1911 nm   (starts low again -> new segment)
+        detector 3: ~1892 -> 2520 nm   (starts low again -> new segment)
+
+    ``_sensor_segment_indices`` detects each "starts low again" as the boundary of
+    a new segment. A clean file therefore yields three segments. We have observed
+    exported files that contain extra rows tacked on after the third sweep -- for
+    example a single sample reported near "5 nm" (far below the instrument's range)
+    or a duplicated chunk of an earlier detector. Those rows are not real
+    measurements; they appear to be an export/instrument glitch.
+
+    Why this matters
+    ----------------
+    The junk rows are kept "in file order", so when raw spectra are plotted the line
+    jumps to the out-of-place points and back, drawing spurious diagonal/horizontal
+    streaks across the chart. They also distort summary statistics used elsewhere
+    (e.g. the median-reflectance test that flags reference panels).
+
+    What we do
+    ----------
+    Keep only the first ``_N_SENSORS`` (3) segments and drop everything after them.
+    A well-formed file has exactly three segments, so this is a no-op there. When we
+    do trim something we emit a ``UserWarning`` rather than trimming silently, so a
+    genuinely malformed file is visible to whoever is running the pipeline instead
+    of being quietly "cleaned up".
+
+    Parameters
+    ----------
+    wls, rfs : the wavelength and reflectance arrays, in original file order.
+    source   : path to the .sig file, used only to make the warning message useful.
+
+    Returns
+    -------
+    The (possibly shortened) ``(wls, rfs)`` arrays.
+    """
+    segments = _sensor_segment_indices(wls)
+    if len(segments) <= _N_SENSORS:
+        return wls, rfs
+
+    valid_end = segments[_N_SENSORS][0]   # first index past the third sweep
+    dropped = len(wls) - valid_end
+    warnings.warn(
+        f"{Path(source).name}: found {len(segments)} sensor sweeps but the "
+        f"HR-1024i has only {_N_SENSORS}. Dropping {dropped} trailing row(s) "
+        f"(wavelengths {wls[valid_end]:.1f}-{wls[-1]:.1f} nm) as corrupt export "
+        f"data. The valid scan ({valid_end} bands) is kept.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return wls[:valid_end], rfs[:valid_end]
 
 
 def _guess_splice_at(segments: list[tuple[int, int]], wls: np.ndarray) -> list[float]:
