@@ -1,101 +1,78 @@
 # Publishing svcProcessingPipeline as a pip Package
 
-## Prerequisites
-- GitHub repo connected to this project
-- Python 3.11
-- Account on [pypi.org](https://pypi.org)
+**Status (2026-06-04):** Local packaging is **complete and verified**. The only
+remaining work is the publish setup, intentionally deferred until the project
+moves to its public GitHub home — that's the final "ship it" step.
 
 ---
 
-## Phase 1: Set Up the Package Locally
+## Where we are
 
-### Step 1 — Confirm `pyproject.toml` in the project root
+### ✅ Done — local packaging
 
-```toml
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+Everything below is in place and was verified on Python 3.11 in a clean venv.
 
-[project]
-name = "svc-processing-pipeline"
-version = "0.1.0"
-description = "SVC hyperspectral processing pipeline"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "numpy",
-    "pandas",
-    "scipy",
-]
+- **`pyproject.toml` metadata** — name, `version = "0.1.0"`, description, readme,
+  `requires-python = ">=3.11"`, runtime deps (`numpy`, `pandas`, `scipy`), the
+  `demo`/`dev` extras, and the `svc-pipeline = "pipeline.cli:main"` console
+  script. Added: PEP 639 license (`license = "GPL-3.0-only"`, `license-files = ["LICENSE"]`),
+  `authors`, `keywords`, `classifiers`, and `[project.urls]`. Build backend pinned
+  to `setuptools>=77` (required for the SPDX `license` string; also avoids the
+  deprecation warnings the old `license = { text = "..." }` form now triggers).
 
-[project.scripts]
-svc-pipeline = "pipeline.cli:main"
+- **`LICENSE`** — GNU General Public License v3.0. Bundled into the wheel
+  automatically via `license-files`.
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["pipeline*"]
-```
+- **Config-path fix (the critical one for an installed package).** The CLI used
+  to locate `config/` from the package's *own* location
+  (`Path(__file__).resolve().parent.parent`). That works for an editable install
+  but **breaks once pip-installed**: the package lands in `site-packages/`, which
+  has no `config/` beside it, so `svc-pipeline config.json` failed with "Config
+  not found." The CLI now resolves relative config / calibration / output paths
+  against the **current working directory** (`Path.cwd()`); absolute paths are
+  honored as-is. An installed user therefore runs `svc-pipeline` from a directory
+  that contains their own `config/…`. See `pipeline/cli.py` (`base_dir = Path.cwd()`)
+  and `RunConfig` in `pipeline/run_config.py` (`base_dir` parameter).
 
-### Step 2 — Keep concrete-module imports
+- **`.gitignore`** — now excludes `build/` and `dist/`.
 
-`pipeline/__init__.py` is intentionally empty. Public API users should import
-from concrete modules:
+### ✅ Done — verification
 
-```python
-from pipeline.resampler import process_sig_file, resample_spectra
-from pipeline.sig_processor import SigFileProcessor
-from pipeline.processor import GroupSpec, SVCDataProcessor, SigSpectraAverager
-```
+- `python -m build` → clean `svc_processing_pipeline-0.1.0` sdist + `py3-none-any` wheel.
+- `pip wheel . --no-deps --no-build-isolation` → **PASSED**; generated wheel
+  metadata reports `License-Expression: GPL-3.0-only` and bundles
+  `dist-info/licenses/LICENSE`.
+- Installed the wheel into a fresh 3.11 venv: `svc-pipeline --help` works, and
+  config resolves from the working directory (verified by running from a temp
+  dir containing `config/config.json`).
+- `pytest` → **28 passed, 1 skipped** (the R-parity test, which skips without
+  reference data).
+- `ruff check .` → clean.
 
-### Step 3 — Test the local install
+### 🔜 Remaining — to ship (do these together, last)
 
-```bash
-python3.11 -m pip install -e ".[dev,demo]"
-python -c "import pipeline; print('ok')"
-svc-pipeline --help
-```
+1. **Pick the public home.** Plan: a public **github.com** repo. (The current
+   remote is Cornell GHE Server, `github.coecis.cornell.edu`, which cannot use
+   PyPI's OIDC Trusted Publishing — that only trusts github.com.)
+2. **Update `[project.urls]` Repository** from the GHE URL to the public
+   `https://github.com/<user>/<repo>`.
+3. **Switch `publish.yml` to OIDC Trusted Publishing** (see below) — removes the
+   API-token secret entirely.
+4. **Confirm the name `svc-processing-pipeline` is free** on [pypi.org](https://pypi.org).
+5. **TestPyPI dry run** (recommended) — rehearse the upload→install round trip.
+6. **Tag and release:** `git tag v0.1.0 && git push --tags`.
 
-The `-e` flag is an editable install — code changes reflect immediately without reinstalling.
-
-### Step 4 — Verify the build
-
-```bash
-pip install build
-python -m build
-```
-
-This produces `dist/svc_processing_pipeline-0.1.0.tar.gz` and a `.whl` file. If it runs without errors the package is well-formed.
-
----
-
-## Phase 2: Register on PyPI
-
-### Step 5 — Create a PyPI account
-
-Go to [pypi.org](https://pypi.org) → Register.
-
-Enable 2FA (required for publishing).
-
-### Step 6 — Generate a PyPI API token
-
-1. Log in → Account Settings → API Tokens → Add API Token
-2. Scope: **Entire account** for the first publish; switch to project-scoped after the first upload
-3. Copy the token — it starts with `pypi-` and is only shown once
-
-### Step 7 — Add the token as a GitHub secret
-
-1. Go to your GitHub repo → Settings → Secrets and variables → Actions
-2. Click **New repository secret**
-3. Name: `PYPI_API_TOKEN`
-4. Value: paste the token
+Prerequisite for any publish path: a **PyPI account with 2FA enabled** (required
+to upload).
 
 ---
 
-## Phase 3: Set Up GitHub Actions Auto-Publish
+## Target publish workflow (OIDC — for the public github.com repo)
 
-### Step 8 — Create the workflow file
-
-Create `.github/workflows/publish.yml`:
+Trusted Publishing lets GitHub Actions authenticate to PyPI with **no stored
+token**. The repo currently ships a *token-based* `publish.yml` because Cornell
+GHE Server can't do OIDC. Once the project lives on public github.com, replace it
+with this:
 
 ```yaml
 name: Publish to PyPI
@@ -103,139 +80,96 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "v*"      # runs on tags like v0.1.0, v1.2.3
+      - "v*"          # fires on version tags like v0.1.0
+  workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi          # optional; lets you add release-approval rules
     permissions:
-      contents: read
+      id-token: write          # REQUIRED for trusted publishing — no token needed
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Build package
+      - name: Build sdist and wheel
         run: |
-          pip install build
+          python -m pip install --upgrade build
           python -m build
-
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+        # no `password:` — identity is proven via OIDC
 ```
 
-### Step 9 — Commit the workflow
+**One-time PyPI setup** (do this before the first tag): pypi.org → your project,
+or **Publishing → pending publisher** if the project doesn't exist yet → add a
+**Trusted Publisher**:
 
-```bash
-git add .github/workflows/publish.yml pyproject.toml
-git commit -m "Add pip packaging and PyPI publish workflow"
-git push
-```
+- Owner: `<user>` · Repository: `<repo>` · Workflow file: `publish.yml` ·
+  Environment: `pypi` (only if you kept the `environment:` line).
+
+The change from the token version currently in the repo is exactly: drop
+`with: password: ${{ secrets.PYPI_API_TOKEN }}`, add `permissions: id-token: write`.
+No `PYPI_API_TOKEN` secret needed.
 
 ---
 
-## Phase 4: Cut the First Release
+## Manual publish (always works, no CI)
 
-### Step 10 — Tag and push
-
-```bash
-git tag v0.1.0
-git push --tags
-```
-
-This triggers the GitHub Action. Check the **Actions** tab on GitHub to watch the run. If it passes, the package will be live at:
-
-```
-https://pypi.org/project/svc-processing-pipeline/
-```
-
-Users can then install it with:
+To publish by hand — useful for the very first release, or if you'd rather not
+rely on Actions:
 
 ```bash
-pip install svc-processing-pipeline
+python -m build
+python -m twine upload dist/*          # prompts for your PyPI token
 ```
+
+Rehearse on **TestPyPI** first to test the full round trip without touching the
+real index:
+
+```bash
+python -m twine upload --repository testpypi dist/*
+pip install -i https://test.pypi.org/simple/ svc-processing-pipeline
+```
+
+Note: `twine upload` *publishes*; it is not the same as `pip install`. It is the
+step that makes `pip install svc-processing-pipeline` work for everyone else.
 
 ---
 
-## Releasing Future Versions
-
-Every new release is a three-step process:
+## Releasing future versions
 
 ```bash
-# 1. Bump the version in pyproject.toml
-#    e.g., version = "0.2.0"
-
-# 2. Commit and tag
+# 1. Bump the version in pyproject.toml, e.g. 0.1.0 -> 0.2.0
+# 2. Commit + tag
 git add pyproject.toml
 git commit -m "Bump to 0.2.0"
 git tag v0.2.0
-
-# 3. Push both the commit and the tag
+# 3. Push commit and tag — the tag triggers publish.yml
 git push && git push --tags
 ```
 
-The GitHub Action runs automatically and publishes the new version to PyPI.
+Optional: `pip install bump2version`, then `bump2version patch|minor|major`
+edits `pyproject.toml` and creates the matching tag automatically.
 
 ---
 
-## Add an MIT License
-
-Before publishing to PyPI, add a `LICENSE` file to the project root. Without one, the code is technically "all rights reserved" and users cannot legally install or use it.
-
-Create `LICENSE` in the project root with the following content (replace the year and name):
-
-```
-MIT License
-
-Copyright (c) 2026 Cole Regnier
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-Then add the license field to `pyproject.toml` under `[project]`:
-
-```toml
-license = { text = "MIT" }
-```
-
-Commit it alongside the other packaging files in Step 9.
-
----
-
-## Optional: Automate Version Bumping
-
-To avoid manually editing `pyproject.toml` each time, install `bump2version`:
+## Quick reference — local build & test loop
 
 ```bash
-pip install bump2version
+python3.11 -m venv .venv && source .venv/bin/activate
+python -m pip install -e ".[dev,demo]"      # editable dev install
+python -m build                             # produce dist/*.whl + *.tar.gz
+python -m twine check dist/*                # validate package metadata
+
+# Faithful "as if installed from PyPI" test, in a throwaway venv:
+python3.11 -m venv /tmp/pkgtest
+/tmp/pkgtest/bin/pip install dist/svc_processing_pipeline-0.1.0-py3-none-any.whl
+/tmp/pkgtest/bin/svc-pipeline --help
 ```
 
-Then run one of:
-
-```bash
-bump2version patch   # 0.1.0 → 0.1.1
-bump2version minor   # 0.1.0 → 0.2.0
-bump2version major   # 0.1.0 → 1.0.0
-```
-
-This edits `pyproject.toml` and creates the git tag automatically.
+Installing the locally built wheel is mechanically identical to
+`pip install svc-processing-pipeline` once published — same artifact, only the
+source differs (local file vs the PyPI index).
