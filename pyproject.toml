@@ -12,6 +12,7 @@ license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [
     { name = "Cole Regnier", email = "nr466@cornell.edu" },
+    { name = "Gold Lab (GrapeSPEC project), Cornell University" },
 ]
 keywords = [
     "hyperspectral",

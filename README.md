@@ -196,8 +196,10 @@ R is **not** required for the production pipeline. It is needed only to regenera
 ## License
 
 Released under the [GNU General Public License v3.0](LICENSE) © 2026 Cole
-Regnier. The package uses the SPDX expression `GPL-3.0-only`, chosen for
-compatibility with the GPL-3 `spectrolab` reference implementation.
+Regnier ([regs08](https://github.com/regs08), nr466@cornell.edu), Gold Lab
+(GrapeSPEC project), Cornell University. The package uses the SPDX expression
+`GPL-3.0-only`, chosen for compatibility with the GPL-3 `spectrolab` reference
+implementation.
 
 ---
 

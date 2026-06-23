@@ -1,5 +1,14 @@
 # Acknowledgments & Citation
 
+## Authorship & affiliation
+
+Author: **Cole Regnier** (GitHub: [regs08](https://github.com/regs08),
+nr466@cornell.edu).
+
+Developed in the **Gold Lab (GrapeSPEC project), Cornell University**. This work
+was carried out with Cornell University resources and is credited to the lab
+accordingly.
+
 ## Relationship to spectrolab
 
 The resampling stage ([`pipeline/resampler.py`](pipeline/resampler.py)) is an
@@ -40,4 +49,5 @@ reimplements:
 For the canonical, version-specific reference, run `citation("spectrolab")` in R.
 
 To cite this pipeline itself, reference the repository and its author
-(Cole Regnier); a versioned archive/DOI may be added on release.
+(Cole Regnier, GitHub [regs08](https://github.com/regs08)), Gold Lab (GrapeSPEC
+project), Cornell University; a versioned archive/DOI may be added on release.
