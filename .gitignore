@@ -1,5 +1,10 @@
 .venv/
 *.egg-info/
+
+# Build artifacts (sdist/wheel from `python -m build`)
+build/
+dist/
+
 .env
 .env.*
 __pycache__/
