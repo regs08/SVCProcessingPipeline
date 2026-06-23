@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Pure-Python SVC HR-1024i hyperspectral .sig processing pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
+license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [
     { name = "Cole Regnier", email = "nr466@cornell.edu" },

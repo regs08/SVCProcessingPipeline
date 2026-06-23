@@ -15,6 +15,10 @@ The frozen reference script
 *calls* spectrolab but contains none of its source. Running it requires
 installing `spectrolab` separately under its own **GPL-3** license.
 
+This repository is distributed under **GPL-3.0-only** for license compatibility
+with `spectrolab`, which is the reference implementation for the resampling
+algorithm.
+
 ## Third-party software
 
 | Software | License | Use in this project |

@@ -20,7 +20,7 @@ A pure-Python pipeline for processing SVC HR-1024i field hyperspectral `.sig` fi
 | [`naming_ids/`](naming_ids/) | Private CSV lookup tables for grouping scans into samples; only the schema README is tracked. | [`naming_ids/README.md`](naming_ids/README.md) |
 | [`FOLDER_STRUCTURE.md`](FOLDER_STRUCTURE.md) | Authoritative tree + reading order. | — |
 | [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md) | Attribution, third-party licenses, and citation. | — |
-| [`LICENSE`](LICENSE) | MIT license. | — |
+| [`LICENSE`](LICENSE) | GNU General Public License v3.0. | — |
 
 Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeline_outputs/sig_resampled/<run>/`.
 
@@ -195,8 +195,9 @@ R is **not** required for the production pipeline. It is needed only to regenera
 
 ## License
 
-Released under the [MIT License](LICENSE) © 2026 Cole Regnier. The distributed
-package (`pipeline/`) is original work and bundles no third-party source code.
+Released under the [GNU General Public License v3.0](LICENSE) © 2026 Cole
+Regnier. The package uses the SPDX expression `GPL-3.0-only`, chosen for
+compatibility with the GPL-3 `spectrolab` reference implementation.
 
 ---
 
