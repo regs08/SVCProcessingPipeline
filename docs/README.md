@@ -18,16 +18,16 @@ The canonical, manuscript-grade description of the algorithm implemented by [`pi
 
 **Anyone modifying [`pipeline/resampler.py`](../pipeline/resampler.py) should keep this document in sync.**
 
-### [`parity_a4any_sb_2025-cn_ch-svc-aviris_bottom_2026-05-27.md`](parity_a4any_sb_2025-cn_ch-svc-aviris_bottom_2026-05-27.md)
-A formal parity report for a specific dataset (15 Bronze-instrument samples). Documents the equivalence statistics (max abs diff 9.4 × 10⁻⁷), the pytest harness verdict, per-wavelength systematic divergence in the 689–710 nm splice region, and the exact software versions used. Template format for any future parity report.
+### [`processing_config_reference.md`](processing_config_reference.md)
+Practical, knob-by-knob companion to `supplementary_methods.md`, keyed to
+[`config/config.json`](../config/config.json). Answers two questions: what each
+pipeline stage does, and why each parameter is set to its current value. Includes
+a stage→config-key map and an "is it safe to change?" guide. Read this when
+editing the config or explaining a setting; read `supplementary_methods.md` for
+the citable version.
 
 ### [`parity_retest_prompt.md`](parity_retest_prompt.md)
 A self-contained LLM prompt that drives a parity re-test for a new dataset. Includes the algorithmic spec (steps 1–6 of the pipeline), the expected statistics, the steps the LLM must perform (run Pipeline B, obtain Pipeline A reference, run [`tests/test_resampler_parity.py`](../tests/test_resampler_parity.py), compute statistics, produce a Markdown report), and tone/style rules ("formal scientific English; do not modify pipeline source"). Copy this verbatim into any capable coding LLM to regenerate a `parity_<dataset>_<date>.md`.
-
-### [`code_audit_2026-06-03.md`](code_audit_2026-06-03.md)
-Full architecture and code-quality audit that motivated the remediation work.
-The companion [`code_audit_plan_2026-06-03.md`](code_audit_plan_2026-06-03.md)
-records the audit execution plan and evidence-gathering phases.
 
 ### [`pip_packaging_guide.md`](pip_packaging_guide.md)
 Packaging and release notes for the current `pyproject.toml` layout and

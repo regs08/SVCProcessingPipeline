@@ -8,7 +8,7 @@ Authoritative map of the repository. Every directory has its own `README.md` des
 svcProcessingPipeline/
 ├── README.md                       # Project entry point (start here)
 ├── FOLDER_STRUCTURE.md             # This file
-├── LICENSE                         # MIT license
+├── LICENSE                         # GNU General Public License v3.0
 ├── ACKNOWLEDGMENTS.md              # Attribution, third-party licenses, citation
 ├── pyproject.toml                  # Package metadata, svc-pipeline console script, ruff config
 ├── .gitignore                      # Excludes data/, pipeline_outputs/, *.sig, naming_ids/, …
@@ -45,11 +45,9 @@ svcProcessingPipeline/
 │
 ├── docs/                           # Manuscript-grade docs — see docs/README.md
 │   ├── README.md
-│   ├── code_audit_2026-06-03.md    # Architecture/code-quality audit
-│   ├── code_audit_plan_2026-06-03.md
 │   ├── pip_packaging_guide.md
+│   ├── processing_config_reference.md  # Knob-by-knob config companion to supplementary_methods
 │   ├── supplementary_methods.md    # Canonical algorithm spec (cite this)
-│   ├── parity_a4any_sb_2025-cn_ch-svc-aviris_bottom_2026-05-27.md
 │   └── parity_retest_prompt.md     # LLM prompt for re-running parity on new data
 │
 ├── archived_r_scripts/             # Frozen R reference — see archived_r_scripts/README.md
