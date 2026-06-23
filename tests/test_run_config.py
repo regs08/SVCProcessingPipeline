@@ -27,7 +27,7 @@ def test_placeholder_guard_exits_with_guidance(tmp_path: Path) -> None:
     config = RunConfig(
         {"sig_input_dir": "<PATH_TO_SIG_INPUT_ROOT>"},
         path=config_path,
-        repo_root=tmp_path,
+        base_dir=tmp_path,
         logger=_logger(),
     )
 
@@ -39,7 +39,7 @@ def test_input_directories_accepts_semicolon_string(tmp_path: Path) -> None:
     config = RunConfig(
         {"sig_input_dirs": "a;b ; c"},
         path=tmp_path / "config.json",
-        repo_root=tmp_path,
+        base_dir=tmp_path,
         logger=_logger(),
     )
 
@@ -47,7 +47,7 @@ def test_input_directories_accepts_semicolon_string(tmp_path: Path) -> None:
 
 
 def test_processing_defaults_are_complete(tmp_path: Path) -> None:
-    config = RunConfig({}, path=tmp_path / "config.json", repo_root=tmp_path, logger=_logger())
+    config = RunConfig({}, path=tmp_path / "config.json", base_dir=tmp_path, logger=_logger())
 
     assert config.processing_params() == {
         "band_min": 400,
@@ -64,7 +64,7 @@ def test_apply_sensor_calibrations_prefers_inline_instrument_block(tmp_path: Pat
     config = RunConfig(
         {"instrument": {"bronze": {"end_line": "2520.4", "serial": "2212118"}}},
         path=tmp_path / "config.json",
-        repo_root=tmp_path,
+        base_dir=tmp_path,
         logger=_logger(),
     )
 
@@ -95,7 +95,7 @@ def test_settings_for_resolves_output_paths(tmp_path: Path) -> None:
         "summary_csv_name": "processed_sig_summary.csv",
         "merged_csv_name": "merged_spectra.csv",
     }
-    config = RunConfig(data, path=tmp_path / "config.json", repo_root=tmp_path, logger=_logger())
+    config = RunConfig(data, path=tmp_path / "config.json", base_dir=tmp_path, logger=_logger())
 
     settings = config.settings_for(Path("example_input"), verbose=True)
 

@@ -20,9 +20,6 @@ from pathlib import Path
 from .run_config import RunConfig
 from .runner import Pipeline
 
-# cli.py lives at <repo>/pipeline/cli.py, so the repo root is two levels up.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
 
 def _configure_logging(verbose: bool) -> logging.Logger:
     level = logging.DEBUG if verbose else logging.INFO
@@ -60,7 +57,11 @@ def main() -> None:
     args = _parse_args()
     logger = _configure_logging(args.verbose)
 
-    run_config = RunConfig.load(_REPO_ROOT, str(args.config), logger)
+    # Resolve relative config, calibration, and output paths against the current
+    # working directory so the installed `svc-pipeline` command works from any
+    # directory. Absolute paths in the config are always honoured as-is.
+    base_dir = Path.cwd()
+    run_config = RunConfig.load(base_dir, str(args.config), logger)
     run_config.ensure_no_placeholder(args.input_dir)
 
     if args.input_dir:

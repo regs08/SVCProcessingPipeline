@@ -65,31 +65,32 @@ class RunConfig:
         data: dict[str, Any],
         *,
         path: Path,
-        repo_root: Path,
+        base_dir: Path,
         logger: logging.Logger,
     ) -> None:
         self.data = data
         self.path = path
-        self.repo_root = repo_root
+        self.base_dir = base_dir
         self._logger = logger
         self._processing_params: dict[str, Any] | None = None
 
     # ── construction ─────────────────────────────────────────────────────────
 
     @classmethod
-    def load(cls, repo_root: Path, value: str, logger: logging.Logger) -> "RunConfig":
+    def load(cls, base_dir: Path, value: str, logger: logging.Logger) -> "RunConfig":
         """Resolve ``value`` to a config file, parse it, and return a RunConfig."""
-        path = cls._resolve_path(repo_root, value)
+        path = cls._resolve_path(base_dir, value)
         data = cls._read_json(path)
         logger.info("Using config: %s", path)
-        return cls(data, path=path, repo_root=repo_root, logger=logger)
+        return cls(data, path=path, base_dir=base_dir, logger=logger)
 
     @staticmethod
-    def _resolve_path(repo_root: Path, value: str) -> Path:
+    def _resolve_path(base_dir: Path, value: str) -> Path:
         """Resolve a run-config argument with friendly fallbacks.
 
-        Tries, in order: the path as given (relative to repo root), the same
-        name under config/, and the same again with a .json suffix appended.
+        Tries, in order: the path as given (relative to ``base_dir``, i.e. the
+        current working directory), the same name under ``config/``, and the
+        same again with a .json suffix appended. Absolute paths are used as-is.
         """
         raw = Path(value).expanduser()
         if raw.is_absolute():
@@ -100,12 +101,12 @@ class RunConfig:
                 names.append(raw.with_suffix(".json"))
             candidates = []
             for name in names:
-                candidates.append(repo_root / name)             # e.g. <repo>/config.json
-                candidates.append(repo_root / "config" / name)  # e.g. <repo>/config/config.json
+                candidates.append(base_dir / name)             # e.g. ./config.json
+                candidates.append(base_dir / "config" / name)  # e.g. ./config/config.json
         for candidate in candidates:
             if candidate.is_file():
                 return candidate
-        available = sorted(p.name for p in (repo_root / "config").glob("*.json"))
+        available = sorted(p.name for p in (base_dir / "config").glob("*.json"))
         raise SystemExit(
             f"Config not found: '{value}'.\n"
             f"  Tried: {', '.join(str(c) for c in candidates)}\n"
@@ -217,12 +218,12 @@ class RunConfig:
 
         explicit = self.data.get("sensor_calibration_file")
         if explicit:
-            path = _resolve_under(self.repo_root, str(explicit))
+            path = _resolve_under(self.base_dir, str(explicit))
             SigFileProcessor.load_default_correction_types(path)
             self._logger.info("Loaded sensor calibration from %s", path.resolve())
             return
 
-        inferred = self.repo_root / "config" / "calibrations" / f"{input_dir.name}.json"
+        inferred = self.base_dir / "config" / "calibrations" / f"{input_dir.name}.json"
         if inferred.exists():
             SigFileProcessor.load_default_correction_types(inferred)
             self._logger.info("Loaded sensor calibration from %s", inferred.resolve())
@@ -262,8 +263,8 @@ class RunConfig:
 
         output_root: Path | None = None
         if self.data.get("output_dir"):
-            output_root = _resolve_under(self.repo_root, str(self.data["output_dir"]))
-        base_output = output_root or self.repo_root
+            output_root = _resolve_under(self.base_dir, str(self.data["output_dir"]))
+        base_output = output_root or self.base_dir
 
         processed_root = _resolve_under(base_output, str(self.data["processed_dir"]))
         resampled_root = _resolve_under(base_output, str(self.data["resampled_dir"]))
