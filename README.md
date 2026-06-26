@@ -10,6 +10,7 @@ A pure-Python pipeline for processing SVC HR-1024i field hyperspectral `.sig` fi
 
 | Path | Purpose | Read me first |
 |---|---|---|
+| [`TUTORIAL.md`](TUTORIAL.md) | Beginner walkthrough — starts in the Jupyter notebook (gentle path), with an advanced CLI track. | Start here if new |
 | [`pyproject.toml`](pyproject.toml) | Package metadata and `svc-pipeline` console script. | This file ↓ |
 | [`pipeline/`](pipeline/) | Core Python package: CLI, `SigFileProcessor`, `resample_spectra`, `SVCDataProcessor`. | [`pipeline/README.md`](pipeline/README.md) |
 | [`tests/`](tests/) | Pytest suite, including the R-vs-Python parity test. | [`tests/README.md`](tests/README.md) |
@@ -27,6 +28,9 @@ Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeli
 ---
 
 ## Quick start
+
+> New to the pipeline? [`TUTORIAL.md`](TUTORIAL.md) starts with the interactive
+> Jupyter notebook (the gentle path) and has an advanced track for the CLI below.
 
 ```bash
 python3.11 -m venv .venv
@@ -173,7 +177,9 @@ python3 scripts/prepare_demo_data.py \
   --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
 ```
 
-See [`notebooks/pipeline_demo/README.md`](notebooks/pipeline_demo/README.md).
+The notebook is config-driven: edit the settings cell (`DATA_FOLDER`,
+`OUTPUT_FOLDER`, `INSTRUMENT`) to run it on your own data and instrument. See
+[`notebooks/pipeline_demo/README.md`](notebooks/pipeline_demo/README.md).
 
 ---
 

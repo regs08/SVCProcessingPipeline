@@ -34,11 +34,14 @@ MPLBACKEND=Agg jupyter nbconvert --to notebook --execute \
   --output /tmp/demo_run.ipynb
 ```
 
-The notebook performs a preflight check before loading spectra. If the `.sig`
-files are missing or a checksum differs, it raises a clear setup error instead
-of failing later in a plotting or grouping cell.
+The notebook is **config-driven**. The opening cells let you set a data folder,
+output folder, and instrument, then `build_config(...)` bundles them and
+auto-detects the instrument from the `.sig` headers. To run it on your own scans,
+edit the settings cell and point `DATA_FOLDER` at your folder.
 
-During execution, the notebook truncates the verified raw demo files into
-`pipeline_outputs/csv_exports/demo_sig_processed/` before using the public
-resampling helper. This mirrors the production Stage 1 -> Stage 2 boundary while
-keeping all generated `.sig` copies under ignored output paths.
+For the bundled demo, an optional cell verifies the external `.sig` files against
+`demo_data_manifest.json` and raises a clear setup error if any are missing or a
+checksum differs. `config.prepare()` then truncates the raw files (Stage 1) into
+`pipeline_outputs/notebook_run/processed_sig/`, mirroring the production
+Stage 1 -> Stage 2 boundary while keeping generated `.sig` copies under ignored
+output paths.

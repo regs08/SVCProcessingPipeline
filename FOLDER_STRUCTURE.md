@@ -7,6 +7,7 @@ Authoritative map of the repository. Every directory has its own `README.md` des
 ```
 svcProcessingPipeline/
 ├── README.md                       # Project entry point (start here)
+├── TUTORIAL.md                     # Beginner walkthrough — notebook-first (gentle), with an advanced CLI track
 ├── FOLDER_STRUCTURE.md             # This file
 ├── LICENSE                         # GNU General Public License v3.0
 ├── ACKNOWLEDGMENTS.md              # Attribution, third-party licenses, citation

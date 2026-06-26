@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from pipeline.resampler import ProcessedSpectrum, process_sig_file
+from pipeline.sig_processor import SigFileProcessor
 from pipeline.processor import SigSpectraAverager
 
 # Standard output wavelength grid used by the pipeline (matches spectrolab)
@@ -79,6 +81,210 @@ def verify_demo_data(
     return spectra_dir
 
 
+# ── Friendly pipeline configuration ─────────────────────────────────────────────
+
+# Parity-verified Stage 2 defaults, in the same shape as the "processing" block of
+# config/config.json.  Changing any of these voids the R/spectrolab parity claim.
+PARITY_PROCESSING_DEFAULTS = {
+    "band_min": 400,
+    "band_max": 2500,
+    "resample_fwhm_nm": 10.0,
+    "splice_interp_wvl": [5.0, 2.0],
+    "fixed_sensor": 2,
+}
+
+
+def _resampler_kwargs(processing: dict) -> dict:
+    """Map a config.json-style ``processing`` block to ``process_sig_file()`` keywords."""
+    return {
+        "band_min": processing["band_min"],
+        "band_max": processing["band_max"],
+        "fwhm_nm": processing["resample_fwhm_nm"],
+        "fixed_sensor": processing["fixed_sensor"],
+        "interp_wvl": tuple(processing["splice_interp_wvl"]),
+    }
+
+
+class PipelineConfig:
+    """Everything a notebook run needs, bundled in one friendly object.
+
+    Build it with :func:`build_config` (or :meth:`from_json`).  It records which
+    instrument took the scans, where outputs go, and which Stage 2 parameters to
+    use — the same knobs as ``config/config.json``, presented simply.
+    """
+
+    def __init__(
+        self,
+        data_folder: Path,
+        output_folder: Path,
+        instrument: str,
+        processing: dict,
+    ) -> None:
+        self.data_folder = data_folder      # folder of raw .sig files
+        self.output_folder = output_folder  # where processed files and CSVs are written
+        self.instrument = instrument        # "bronze" / "silver" (resolved)
+        self.processing = processing        # config.json-style processing block
+
+    @property
+    def processed_folder(self) -> Path:
+        """Where Stage 1 writes the truncated .sig files."""
+        return self.output_folder / "processed_sig"
+
+    @property
+    def resampler_kwargs(self) -> dict:
+        """``processing`` mapped to ``process_sig_file()`` keyword arguments."""
+        return _resampler_kwargs(self.processing)
+
+    def __repr__(self) -> str:
+        return (
+            "PipelineConfig\n"
+            f"  data folder   : {self.data_folder}\n"
+            f"  output folder : {self.output_folder}\n"
+            f"  instrument    : {self.instrument}\n"
+            f"  band range    : {self.processing['band_min']}-{self.processing['band_max']} nm\n"
+            f"  resample FWHM : {self.processing['resample_fwhm_nm']} nm\n"
+        )
+
+    def prepare(self, verbose: bool = False) -> "PipelineConfig":
+        """Stage 1 — truncate every raw .sig file at the instrument's end wavelength.
+
+        Reads ``data_folder`` and writes truncated copies into ``processed_folder``.
+        Run this once before loading spectra.
+        """
+        sig_files = sorted(Path(self.data_folder).glob("*.sig"))
+        if not sig_files:
+            raise FileNotFoundError(
+                f"No .sig files found in {self.data_folder}.\n"
+                "  - Using the bundled demo? Run: python3 scripts/prepare_demo_data.py "
+                "--source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom\n"
+                "  - Using your own data? Set DATA_FOLDER to the folder holding your .sig files."
+            )
+        self.processed_folder.mkdir(parents=True, exist_ok=True)
+        SigFileProcessor(correction_type=self.instrument).process_sig_files(
+            input_folder=str(self.data_folder),
+            output_folder=str(self.processed_folder),
+            verbose=verbose,
+        )
+        print(f"Stage 1 complete - truncated {len(sig_files)} file(s)")
+        print(f"  raw       : {self.data_folder}")
+        print(f"  processed : {self.processed_folder}")
+        return self
+
+    def to_json(self, path) -> Path:
+        """Save these settings as a ``config/config.json``-compatible file.
+
+        The saved file also works with the command-line pipeline:
+        ``svc-pipeline <saved_file>``.
+        """
+        path = Path(path)
+        config_dict = {
+            "sig_input_dir": str(self.data_folder),
+            "process_all_subdirs": False,
+            "processed_dir": "processed_sig",
+            "resampled_dir": "resampled_sig",
+            "output_dir": str(self.output_folder),
+            "summary_csv_name": "processed_sig_summary.csv",
+            "merged_csv_name": "merged_spectra.csv",
+            "instrument": {
+                self.instrument: {
+                    "end_line": SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(self.instrument, ""),
+                }
+            },
+            "processing": dict(self.processing),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as handle:
+            json.dump(config_dict, handle, indent=2)
+        return path
+
+    @classmethod
+    def from_json(cls, path, *, instrument: str = "auto") -> "PipelineConfig":
+        """Build a config from an existing ``config/config.json``-style file."""
+        with Path(path).open() as handle:
+            data = json.load(handle)
+        processing = {**PARITY_PROCESSING_DEFAULTS, **(data.get("processing") or {})}
+        return build_config(
+            data_folder=data["sig_input_dir"],
+            output_folder=data.get("output_dir", "pipeline_outputs/notebook_run"),
+            instrument=instrument,
+            processing=processing,
+        )
+
+
+def _detect_instrument(data_folder: Path) -> str:
+    """Return 'bronze' or 'silver' by reading the .sig file headers.
+
+    Raises a clear error if the folder mixes instruments or the instrument is not
+    recognised — in which case set INSTRUMENT explicitly in the settings cell.
+    """
+    inspection = SigFileProcessor(correction_type="silver")
+    result = inspection.check_instrument_consistency(str(data_folder))
+    if result.get("total_files", 0) == 0:
+        raise FileNotFoundError(
+            f"No .sig files found in {data_folder} to detect the instrument from."
+        )
+    if not result.get("consistent", False):
+        raise ValueError(
+            "This folder mixes scans from different instruments "
+            f"({result.get('instrument_name')}). Split them into one folder per "
+            'instrument, or set INSTRUMENT to "bronze" / "silver" explicitly.'
+        )
+    name = str(result.get("instrument_name", "")).lower()
+    if name not in SigFileProcessor.DEFAULT_CORRECTION_TYPES:
+        raise ValueError(
+            f"Could not recognise the instrument (detected: '{result.get('instrument_name')}'). "
+            'Set INSTRUMENT to "bronze" or "silver" in the settings cell.'
+        )
+    return name
+
+
+def build_config(
+    data_folder,
+    output_folder="pipeline_outputs/notebook_run",
+    instrument: str = "auto",
+    processing: dict | None = None,
+) -> PipelineConfig:
+    """Build a :class:`PipelineConfig` from a few friendly settings.
+
+    Parameters
+    ----------
+    data_folder   : folder containing your raw .sig files
+    output_folder : where processed files and CSVs are written
+    instrument    : "auto" (detect from the file headers), or "bronze" / "silver"
+    processing    : optional override of the Stage 2 parameters (config.json shape);
+                    omit to use the parity-verified defaults
+    """
+    data_folder = Path(data_folder).expanduser()
+    output_folder = Path(output_folder).expanduser()
+
+    if instrument == "auto":
+        resolved_instrument = _detect_instrument(data_folder)
+    else:
+        resolved_instrument = str(instrument).strip().lower()
+        if resolved_instrument not in SigFileProcessor.DEFAULT_CORRECTION_TYPES:
+            raise ValueError(
+                f'Unknown instrument "{instrument}". Use "auto", or one of: '
+                f'{", ".join(SigFileProcessor.DEFAULT_CORRECTION_TYPES)}.'
+            )
+
+    merged_processing = {**PARITY_PROCESSING_DEFAULTS, **(processing or {})}
+    for key, default in PARITY_PROCESSING_DEFAULTS.items():
+        if merged_processing[key] != default:
+            warnings.warn(
+                f"processing.{key} = {merged_processing[key]} differs from the parity-verified "
+                f"default {default}; R/spectrolab parity is no longer guaranteed.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    return PipelineConfig(
+        data_folder=data_folder,
+        output_folder=output_folder,
+        instrument=resolved_instrument,
+        processing=merged_processing,
+    )
+
+
 # ── Single spectrum ────────────────────────────────────────────────────────────
 
 class Spectrum:
@@ -94,12 +300,14 @@ class Spectrum:
     spectrum.plot()           # processed plot
     """
 
-    def __init__(self, filepath: str | Path) -> None:
+    def __init__(self, filepath: str | Path, *, processing: dict | None = None) -> None:
         path = Path(filepath)
         self.name = path.stem
         self.filepath = path
 
-        self._processed_result: ProcessedSpectrum = process_sig_file(path)
+        # `processing` are process_sig_file() keywords (see PipelineConfig.resampler_kwargs);
+        # omitting it uses the parity-verified defaults.
+        self._processed_result: ProcessedSpectrum = process_sig_file(path, **(processing or {}))
         self._raw_wavelengths = self._processed_result.raw_wavelengths
         self._raw_reflectance = self._processed_result.raw_reflectance
 
@@ -112,6 +320,19 @@ class Spectrum:
         self._corrected_wavelengths: np.ndarray | None = None
         self._corrected_reflectance: np.ndarray | None = None
         self.is_processed: bool = False
+
+    @classmethod
+    def from_config(cls, config: "PipelineConfig", path: str | Path | None = None) -> "Spectrum":
+        """Load one scan from a config's processed folder (first file by default)."""
+        if path is None:
+            sig_files = sorted(Path(config.processed_folder).glob("*.sig"))
+            if not sig_files:
+                raise FileNotFoundError(
+                    f"No processed .sig files in {config.processed_folder}. "
+                    "Run config.prepare() first."
+                )
+            path = sig_files[0]
+        return cls(path, processing=config.resampler_kwargs)
 
     # ── dunder ──────────────────────────────────────────────────────────────
 
@@ -237,7 +458,13 @@ class SpectraCollection:
     collection.plot()                      # all processed spectra
     """
 
-    def __init__(self, directory: str | Path, n_files: int | None = None) -> None:
+    def __init__(
+        self,
+        directory: str | Path,
+        n_files: int | None = None,
+        *,
+        processing: dict | None = None,
+    ) -> None:
         directory = Path(directory)
         sig_files = sorted(directory.glob("*.sig"))
         if n_files is not None:
@@ -246,7 +473,12 @@ class SpectraCollection:
             raise FileNotFoundError(f"No .sig files found in {directory}")
 
         self.name = directory.name
-        self.spectra = [Spectrum(path) for path in sig_files]
+        self.spectra = [Spectrum(path, processing=processing) for path in sig_files]
+
+    @classmethod
+    def from_config(cls, config: "PipelineConfig", n_files: int | None = None) -> "SpectraCollection":
+        """Load every processed scan referenced by a config (honours its Stage 2 settings)."""
+        return cls(config.processed_folder, n_files=n_files, processing=config.resampler_kwargs)
 
     # ── dunder ──────────────────────────────────────────────────────────────
 
