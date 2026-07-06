@@ -76,7 +76,12 @@ class Pipeline:
             logger.info("Starting SIG processing: %s -> %s", input_dir.resolve(), output_dir.resolve())
             logger.info("Checking instrument consistency")
 
-        inspection_processor = SigFileProcessor(correction_type="silver")
+        inspection_processor = SigFileProcessor(
+            correction_type="silver",
+            correction_types=settings.correction_types,
+            instrument_numbers=settings.instrument_numbers,
+            logger=logger,
+        )
         consistency = inspection_processor.check_instrument_consistency(str(input_dir))
 
         for warning in consistency.get("warnings", []):
@@ -94,9 +99,7 @@ class Pipeline:
         instrument_value = str(consistency.get("instrument") or "")
         sensor_type = instrument_name.lower()
 
-        end_line_value = settings.end_line_overrides.get(sensor_type) or SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(
-            sensor_type
-        )
+        end_line_value = settings.end_line_overrides.get(sensor_type) or settings.correction_types.get(sensor_type)
         if not end_line_value:
             logger.error("No end-line value available for sensor type '%s'", sensor_type)
             return None
@@ -114,7 +117,7 @@ class Pipeline:
         if verbose:
             logger.info("Running SigFileProcessor (end line %s)", end_line_value)
 
-        processor = SigFileProcessor(correction_value=end_line_value)
+        processor = SigFileProcessor(correction_value=end_line_value, logger=logger)
         processor.process_sig_files(
             input_folder=str(input_dir),
             output_folder=str(output_dir),

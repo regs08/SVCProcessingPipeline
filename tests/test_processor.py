@@ -46,6 +46,23 @@ def test_sig_spectra_averager_computes_group_mean() -> None:
     assert averaged.loc[0, "401"] == pytest.approx(3.0)
 
 
+def test_sig_spectra_averager_raw_rows_follow_requested_member_order() -> None:
+    df = pd.DataFrame(
+        {
+            "sample_name": ["leaf.0001", "leaf.0002", "leaf.0003"],
+            "400": [1.0, 3.0, 10.0],
+            "401": [2.0, 4.0, 20.0],
+        }
+    )
+
+    with pytest.warns(UserWarning, match="do not belong"):
+        raw = SigSpectraAverager(df).aggregate([(2, 1)], method=None, index_base=0)
+
+    # Row order follows the requested member order (2, then 1) — the same
+    # grouping group_by() already computed — not the original file order.
+    assert list(raw["name"]) == ["leaf.0002", "leaf.0001"]
+
+
 def test_concat_grouped_and_ungrouped_can_keep_raw_rows() -> None:
     processor = SVCDataProcessor()
     processor.df = pd.DataFrame(

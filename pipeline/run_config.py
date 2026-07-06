@@ -18,7 +18,8 @@ from typing import Any
 
 from .sig_processor import SigFileProcessor
 
-# Snapshots of the built-in calibration tables, captured before any run mutates them.
+# Reference snapshots of SigFileProcessor's built-in calibration tables, used as
+# the fallback level of `_resolve_calibrations`'s priority order below.
 _BUILTIN_SENSOR_CALIBRATIONS = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
 _BUILTIN_INSTRUMENT_NUMBERS  = dict(SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS)
 
@@ -55,6 +56,8 @@ class PipelineSettings:
     end_line_overrides: dict[str, str]
     verbose: bool
     processing_params: dict
+    correction_types: dict[str, str]
+    instrument_numbers: dict[str, str]
 
 
 class RunConfig:
@@ -203,38 +206,41 @@ class RunConfig:
                 params[key] = tuple(default) if isinstance(default, list) else default
         return params
 
-    def apply_sensor_calibrations(self, input_dir: Path) -> None:
-        """Set ``SigFileProcessor``'s active calibration tables for ``input_dir``.
+    def _resolve_calibrations(self, input_dir: Path) -> tuple[dict[str, str], dict[str, str]]:
+        """Resolve the correction-type and instrument-number tables for ``input_dir``.
 
         Priority: inline ``instrument`` block > ``sensor_calibration_file`` >
         auto-inferred ``config/calibrations/<input_dir_name>.json`` > built-in
-        defaults.
+        defaults. Pure — returns plain dicts and never touches
+        ``SigFileProcessor.DEFAULT_CORRECTION_TYPES``/``DEFAULT_INSTRUMENT_NUMBERS``.
         """
-        SigFileProcessor.DEFAULT_CORRECTION_TYPES = dict(_BUILTIN_SENSOR_CALIBRATIONS)
-        SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS = dict(_BUILTIN_INSTRUMENT_NUMBERS)
+        inline = self._instrument_block_calibrations()
+        if inline is not None:
+            return inline
 
-        if self._apply_instrument_block():
-            return
+        instrument_numbers = dict(_BUILTIN_INSTRUMENT_NUMBERS)
 
         explicit = self.data.get("sensor_calibration_file")
         if explicit:
             path = _resolve_under(self.base_dir, str(explicit))
-            SigFileProcessor.load_default_correction_types(path)
+            correction_types = SigFileProcessor.parse_correction_types_file(path)
             self._logger.info("Loaded sensor calibration from %s", path.resolve())
-            return
+            return correction_types, instrument_numbers
 
         inferred = self.base_dir / "config" / "calibrations" / f"{input_dir.name}.json"
         if inferred.exists():
-            SigFileProcessor.load_default_correction_types(inferred)
+            correction_types = SigFileProcessor.parse_correction_types_file(inferred)
             self._logger.info("Loaded sensor calibration from %s", inferred.resolve())
-        else:
-            self._logger.debug("No sensor calibration file found at %s; using built-in defaults.", inferred)
+            return correction_types, instrument_numbers
 
-    def _apply_instrument_block(self) -> bool:
-        """Apply the inline ``instrument`` block, if present. Returns True if applied."""
+        self._logger.debug("No sensor calibration file found at %s; using built-in defaults.", inferred)
+        return dict(_BUILTIN_SENSOR_CALIBRATIONS), instrument_numbers
+
+    def _instrument_block_calibrations(self) -> tuple[dict[str, str], dict[str, str]] | None:
+        """Resolve calibrations from the inline ``instrument`` config block, if present."""
         block = self.data.get("instrument")
         if not block:
-            return False
+            return None
 
         end_lines: dict[str, str] = {}
         serials: dict[str, str] = {}
@@ -248,18 +254,19 @@ class RunConfig:
             else:
                 end_lines[key] = str(values).strip()  # flat {"bronze": "2520.4"} shorthand
 
+        correction_types = {**dict(_BUILTIN_SENSOR_CALIBRATIONS), **end_lines}
+        instrument_numbers = {**dict(_BUILTIN_INSTRUMENT_NUMBERS), **serials}
         if end_lines:
-            SigFileProcessor.DEFAULT_CORRECTION_TYPES = {**dict(_BUILTIN_SENSOR_CALIBRATIONS), **end_lines}
             self._logger.info("Instrument end-lines from config: %s", end_lines)
         if serials:
-            SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS = {**dict(_BUILTIN_INSTRUMENT_NUMBERS), **serials}
             self._logger.info("Instrument serials from config: %s", serials)
-        return True
+        return correction_types, instrument_numbers
 
     def settings_for(self, input_dir: Path, *, verbose: bool) -> PipelineSettings:
         """Build the fully-resolved :class:`PipelineSettings` for one input directory."""
         input_dir = Path(input_dir).expanduser()
         source_name = input_dir.name or "sig_input"
+        correction_types, instrument_numbers = self._resolve_calibrations(input_dir)
 
         output_root: Path | None = None
         if self.data.get("output_dir"):
@@ -291,4 +298,6 @@ class RunConfig:
             end_line_overrides=end_line_overrides,
             verbose=verbose,
             processing_params=self.processing_params(),
+            correction_types=correction_types,
+            instrument_numbers=instrument_numbers,
         )

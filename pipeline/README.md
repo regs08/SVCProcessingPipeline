@@ -15,9 +15,8 @@ Encapsulates *what to run*. `RunConfig.load(repo_root, name, logger)` resolves t
 
 - `.ensure_no_placeholder(input_dir_override)` — abort with guidance if the template's `<PATH_TO_SIG_INPUT_ROOT>` was never edited.
 - `.input_directories()` — expand `sig_input_dir` / `sig_input_dirs` / `process_all_subdirs` into the directories to process.
-- `.apply_sensor_calibrations(input_dir)` — set `SigFileProcessor`'s active end-line/serial tables (priority: inline `instrument` block > `sensor_calibration_file` > `config/calibrations/<dir>.json` > built-in defaults).
 - `.processing_params()` — the `processing` block merged over the parity-verified defaults (cached; warns once on any non-parity value).
-- `.settings_for(input_dir, *, verbose)` — build the per-directory `PipelineSettings` (a frozen dataclass of resolved input/output paths + `processing_params`).
+- `.settings_for(input_dir, *, verbose)` — build the per-directory `PipelineSettings` (a frozen dataclass of resolved input/output paths + `processing_params` + resolved `correction_types`/`instrument_numbers`). Internally resolves `SigFileProcessor`'s end-line/serial tables for this directory (priority: inline `instrument` block > `sensor_calibration_file` > `config/calibrations/<dir>.json` > built-in defaults) as plain dicts — it does not mutate `SigFileProcessor.DEFAULT_CORRECTION_TYPES`/`DEFAULT_INSTRUMENT_NUMBERS`, so calibration is resolved fresh per directory with no shared global state between runs.
 
 ### [`runner.py`](runner.py) — `Pipeline`
 Encapsulates *doing the work*. `Pipeline(settings, logger).run(step)` runs Stage 1 and/or Stage 2 and returns `{"summary_csv": …, "merged_csv": …}`:
@@ -28,13 +27,15 @@ Encapsulates *doing the work*. `Pipeline(settings, logger).run(step)` runs Stage
 ### [`sig_processor.py`](sig_processor.py) — `SigFileProcessor`
 Truncates and inspects raw `.sig` ASCII files emitted by the SVC HR-1024i instrument.
 
-- `DEFAULT_CORRECTION_TYPES` — built-in sensor calibration end-line values: `{"bronze": "2520.4", "silver": "2517.9"}` (units: nm, used as the trailing-line wavelength at which truncation stops).
-- `DEFAULT_INSTRUMENT_NUMBERS` — known serial numbers: `{"bronze": "2212118", "silver": "1202103"}`.
-- `load_default_correction_types(config_path)` — classmethod that overwrites `DEFAULT_CORRECTION_TYPES` from a sensor calibration JSON file (same shape as files in [`config/calibrations/`](../config/calibrations/)).
-- `__init__(correction_value=…, correction_type=…, correction_config=…)` — three mutually exclusive ways to construct the processor. `correction_value` is the explicit end-line wavelength string; `correction_type` is one of the registered names (`bronze` / `silver`); `correction_config` is a dict with keys `end_line`, `instrument_number`, `name`.
+- `DEFAULT_CORRECTION_TYPES` — built-in sensor calibration end-line values: `{"bronze": "2520.4", "silver": "2517.9"}` (units: nm, used as the trailing-line wavelength at which truncation stops). Class-wide fallback only — `RunConfig` never mutates this at runtime; see `correction_types`/`instrument_numbers` below.
+- `DEFAULT_INSTRUMENT_NUMBERS` — known serial numbers: `{"bronze": "2212118", "silver": "1202103"}`. Same fallback-only status as `DEFAULT_CORRECTION_TYPES`.
+- `parse_correction_types_file(config_path)` — static method that parses a sensor-calibration JSON file (same shape as files in [`config/calibrations/`](../config/calibrations/)) into a plain `correction_type -> end_line` dict, without touching any class state. This is what `RunConfig.settings_for()` uses to resolve per-directory calibration.
+- `load_default_correction_types(config_path)` — classmethod that overwrites `DEFAULT_CORRECTION_TYPES` from a sensor calibration JSON file (delegates to `parse_correction_types_file`). Mutates class-wide state on purpose — intended for direct, explicit use (e.g. in a notebook), not for per-run resolution.
+- `__init__(correction_value=…, correction_type=…, correction_config=…, correction_types=…, instrument_numbers=…, logger=…)` — three mutually exclusive ways to specify the correction itself. `correction_value` is the explicit end-line wavelength string; `correction_type` is one of the registered names (`bronze` / `silver`), looked up in `correction_types`/`instrument_numbers` if supplied, else the class-wide `DEFAULT_CORRECTION_TYPES`/`DEFAULT_INSTRUMENT_NUMBERS`; `correction_config` is a dict with keys `end_line`, `instrument_number`, `name`. `correction_types`/`instrument_numbers` let a caller (e.g. `RunConfig`) inject a per-instance calibration table instead of relying on shared class state. `logger`, if supplied, routes verbose/error messages through it instead of `print()`.
 - `process_sig_files(input_folder, output_folder, verbose=False)` — iterate every `.sig` in `input_folder`, write a truncated copy to `output_folder`. Truncation keeps lines up to and including the first line that starts with `end_line_value`.
 - `check_instrument_consistency(folder_path)` — returns a dict with keys `consistent`, `instrument`, `instrument_name`, `files_by_instrument`, `total_files`, `warnings`. Used by the orchestrator to abort early when a folder mixes instruments.
 - `extract_instrument_from_file(file_path)` / `get_file_metadata(file_path)` — header parsers (read the `instrument=…` line or the full `key=value` header block respectively).
+- `get_supported_correction_types()` — the correction-type names this instance knows about (e.g. `['bronze', 'silver']`, or whatever was injected via `correction_types=`/loaded via `load_default_correction_types`). The end-line value, correction type, and instrument number themselves are plain public attributes (`.end_line_value`, `.correction_type`, `.instrument_number`) — read them directly rather than through a getter.
 
 The class instance never holds spectral data; it streams files line-by-line and writes to disk. Safe to instantiate per directory.
 
@@ -60,7 +61,7 @@ Public entry points:
   with rows = sample names (`.sig` stem), columns = integer wavelengths 400–2500.
   It delegates to `process_sig_file()` and returns the `Path` to the written file.
 
-Constants (top of module): `_FWHM_NM = 10.0`, `_SIGMA_NM = _FWHM_NM / 2.355`, `_INTERP_WVL = (5.0, 2.0)`, `_FIXED_SENSOR = 2`, `_BAND_MIN = 400`, `_BAND_MAX = 2500`. Do not edit these without re-running the parity test in [`tests/`](../tests/).
+Constants (top of module): `_FWHM_NM = 10.0`, `_INTERP_WVL = (5.0, 2.0)`, `_FIXED_SENSOR = 2`, `_BAND_MIN = 400`, `_BAND_MAX = 2500`. Do not edit these without re-running the parity test in [`tests/`](../tests/). (Gaussian sigma is derived from `_FWHM_NM` via `_sigma_from_fwhm()`, not stored as a separate constant.)
 
 ### [`processor.py`](processor.py) — `SVCDataProcessor`, `SigSpectraAverager`, `GroupSpec`, `find_spectra_by_name`
 Post-resampling utilities for grouping and averaging spectra. Not invoked by the

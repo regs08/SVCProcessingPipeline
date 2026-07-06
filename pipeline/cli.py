@@ -75,7 +75,6 @@ def main() -> None:
 
     overall_results: list[tuple[Path, dict[str, Path | None]]] = []
     for input_dir in input_dirs:
-        run_config.apply_sensor_calibrations(input_dir)
         settings = run_config.settings_for(input_dir, verbose=args.verbose)
         results = Pipeline(settings, logger).run(args.step)
         overall_results.append((input_dir, results))

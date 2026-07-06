@@ -24,6 +24,8 @@ def _settings(tmp_path: Path, input_dir: Path) -> PipelineSettings:
             "splice_interp_wvl": (5.0, 2.0),
             "fixed_sensor": 2,
         },
+        correction_types={"bronze": "2520.4", "silver": "2517.9"},
+        instrument_numbers={"bronze": "2212118", "silver": "1202103"},
     )
 
 

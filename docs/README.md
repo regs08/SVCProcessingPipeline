@@ -29,6 +29,15 @@ the citable version.
 ### [`parity_retest_prompt.md`](parity_retest_prompt.md)
 A self-contained LLM prompt that drives a parity re-test for a new dataset. Includes the algorithmic spec (steps 1–6 of the pipeline), the expected statistics, the steps the LLM must perform (run Pipeline B, obtain Pipeline A reference, run [`tests/test_resampler_parity.py`](../tests/test_resampler_parity.py), compute statistics, produce a Markdown report), and tone/style rules ("formal scientific English; do not modify pipeline source"). Copy this verbatim into any capable coding LLM to regenerate a `parity_<dataset>_<date>.md`.
 
+### [`code_audit_prompt.md`](code_audit_prompt.md)
+A self-contained LLM prompt that drives a piece-by-piece architecture and
+code-quality audit of the `pipeline/` package: SOLID lenses, readability for
+the non-coder lab audience, deployability, and citability against
+`docs/supplementary_methods.md`. Walks the six core modules in execution
+order, one at a time, and requires explicit confirmation before any
+cross-module or public-API change. Copy this verbatim into any capable
+coding LLM to run (or re-run) the audit.
+
 ### [`pip_packaging_guide.md`](pip_packaging_guide.md)
 Packaging and release notes for the current `pyproject.toml` layout and
 `svc-pipeline` console script.

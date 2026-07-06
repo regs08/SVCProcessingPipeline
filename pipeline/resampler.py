@@ -31,7 +31,6 @@ from scipy.cluster.vq import kmeans as _scipy_kmeans, vq as _scipy_vq
 
 # ── spectrolab replication constants ────────────────────────────────────────
 _FWHM_NM         = 10.0      # spectrolab resample fwhm=10
-_SIGMA_NM        = _FWHM_NM / 2.355          # Gaussian σ ≈ 4.25 nm
 _INTERP_WVL      = (5.0, 2.0)                # spectrolab interpolate_wvl default
 _FIXED_SENSOR    = 2                          # spectrolab fixed_sensor when 2 splices
 _BAND_MIN        = 400
@@ -349,7 +348,7 @@ def _gaussian_resample(
     wls: np.ndarray,
     rfs: np.ndarray,
     target: np.ndarray,
-    sigma: float = _SIGMA_NM,
+    sigma: float,
 ) -> np.ndarray:
     """
     Gaussian-weighted resampling: replicates spectrolab's resample(fwhm=10).

@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from pipeline.run_config import RunConfig
-from pipeline.sig_processor import SigFileProcessor
 
 
 def _logger() -> logging.Logger:
@@ -58,9 +57,7 @@ def test_processing_defaults_are_complete(tmp_path: Path) -> None:
     }
 
 
-def test_apply_sensor_calibrations_prefers_inline_instrument_block(tmp_path: Path) -> None:
-    original_types = dict(SigFileProcessor.DEFAULT_CORRECTION_TYPES)
-    original_serials = dict(SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS)
+def test_resolve_calibrations_prefers_inline_instrument_block(tmp_path: Path) -> None:
     config = RunConfig(
         {"instrument": {"bronze": {"end_line": "2520.4", "serial": "2212118"}}},
         path=tmp_path / "config.json",
@@ -68,13 +65,13 @@ def test_apply_sensor_calibrations_prefers_inline_instrument_block(tmp_path: Pat
         logger=_logger(),
     )
 
-    try:
-        config.apply_sensor_calibrations(tmp_path)
-        assert SigFileProcessor.DEFAULT_CORRECTION_TYPES["bronze"] == "2520.4"
-        assert SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS["bronze"] == "2212118"
-    finally:
-        SigFileProcessor.DEFAULT_CORRECTION_TYPES = original_types
-        SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS = original_serials
+    correction_types, instrument_numbers = config._resolve_calibrations(tmp_path)
+
+    assert correction_types["bronze"] == "2520.4"
+    assert instrument_numbers["bronze"] == "2212118"
+    # Sensor types absent from the inline block still fall back to the
+    # built-in defaults rather than disappearing.
+    assert correction_types["silver"] == "2517.9"
 
 
 def test_load_reports_invalid_json(tmp_path: Path) -> None:
@@ -104,3 +101,5 @@ def test_settings_for_resolves_output_paths(tmp_path: Path) -> None:
     assert settings.resampled_dir == tmp_path / "pipeline_outputs/sig_resampled/example_input"
     assert settings.summary_csv.name == "example_input_processed_sig_summary.csv"
     assert settings.merged_csv_name == "example_input_merged_spectra.csv"
+    assert settings.correction_types["silver"] == "2517.9"
+    assert settings.instrument_numbers["silver"] == "1202103"
