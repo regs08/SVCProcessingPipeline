@@ -362,7 +362,7 @@ instruments). The **`processing`** block holds Stage 2's scientific parameters.
 > why you're changing them — they're numerically verified against the original R
 > reference, and any change prints a warning that the guarantee no longer holds.
 > Full key-by-key detail is in [`config/README.md`](config/README.md) and
-> [`docs/processing_config_reference.md`](docs/processing_config_reference.md).
+> [`docs/in_depth_methods_and_config_guide.md`](docs/in_depth_methods_and_config_guide.md).
 
 > **Don't commit private paths.** Keep the placeholder in the shared
 > `config/config.json`; save your personal edited version under a different name.
@@ -443,7 +443,7 @@ Add `--verbose` to any terminal run to see exactly what each stage is doing.
 |---|---|
 | Look up every config key precisely | [`config/README.md`](config/README.md) |
 | Understand the algorithm / cite the method | [`docs/supplementary_methods.md`](docs/supplementary_methods.md) |
-| Know why each parameter is set the way it is | [`docs/processing_config_reference.md`](docs/processing_config_reference.md) |
+| Know why each parameter is set the way it is | [`docs/in_depth_methods_and_config_guide.md`](docs/in_depth_methods_and_config_guide.md) |
 | Call the pipeline from your own Python code | [`pipeline/README.md`](pipeline/README.md) |
 | Build or publish the package | [`docs/pip_packaging_guide.md`](docs/pip_packaging_guide.md) |
 | See the whole repo layout | [`FOLDER_STRUCTURE.md`](FOLDER_STRUCTURE.md) |

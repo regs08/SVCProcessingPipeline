@@ -47,7 +47,7 @@ svcProcessingPipeline/
 ├── docs/                           # Manuscript-grade docs — see docs/README.md
 │   ├── README.md
 │   ├── pip_packaging_guide.md
-│   ├── processing_config_reference.md  # Knob-by-knob config companion to supplementary_methods
+│   ├── in_depth_methods_and_config_guide.md  # Accessible methods + config companion to supplementary_methods
 │   ├── supplementary_methods.md    # Canonical algorithm spec (cite this)
 │   └── parity_retest_prompt.md     # LLM prompt for re-running parity on new data
 │

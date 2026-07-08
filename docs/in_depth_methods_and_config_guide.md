@@ -1,17 +1,21 @@
-# Processing Configuration Reference (`config/config.json`)
+# In-Depth Methods & Configuration Guide
 
-A working reference for the pipeline's configuration, written to answer two
-questions with confidence:
+A plain-language, in-depth guide to what this pipeline does, why it's built
+the way it is, and how to configure it — written for a non-coder lab reader,
+not a citable methods section. Answers three questions with confidence:
 
 1. **What is each stage of the process?** → [Part 1](#part-1--the-pipeline-stages).
 2. **Why do we run it with these parameter values?** → [Part 2](#part-2--the-parameters).
+3. **Why is the pipeline built this way at all** (Python over R, this
+   algorithm over off-the-shelf alternatives)? → [Part 3](#part-3--why-the-pipeline-is-built-this-way).
 
-This is the practical, knob-by-knob companion to the formal
-[supplementary_methods.md](supplementary_methods.md). Where they overlap, the
-supplementary methods is the citable version with equations and parity
-statistics; this file is the one to read when you are editing the config or
-explaining a setting out loud. Code pointers are given so you can confirm any
-claim here against the source.
+This is the practical, accessible companion to the formal
+[supplementary_methods.md](supplementary_methods.md). Where they overlap,
+the supplementary methods is the citable version with equations, formal
+rationale, and parity statistics, meant for the manuscript; this file is the
+one to read to actually understand and operate the pipeline, or to explain a
+setting out loud. Code pointers are given so you can confirm any claim here
+against the source.
 
 ---
 
@@ -308,6 +312,67 @@ These don't affect the science — only where files are read from and written to
 The rule of thumb: **I/O keys are yours to set; `instrument` keys track the
 hardware; the `processing` block is locked to the validated `spectrolab` algorithm
 and should move only as a documented scientific decision.**
+
+---
+
+## Part 3 — Why the pipeline is built this way
+
+Two design decisions sit above the config file and aren't things you can
+tune — they're why this codebase exists in this form at all. The full
+formal argument (with citations) is `supplementary_methods.md` §6–7; this is
+the plain-language version.
+
+### Why Python instead of the original R/`spectrolab` pipeline?
+
+The original pipeline was written in R against the `spectrolab` package. This
+repo is an independent Python reimplementation ("Pipeline B" in
+`supplementary_methods.md`), verified to reproduce R's output to within
+1.10 × 10⁻⁶ absolute reflectance across 66 real samples — far below the
+instrument's own noise floor, so the two are numerically interchangeable.
+Given that, Python won on practical grounds:
+
+- **One toolchain, not two.** Everything downstream of this pipeline
+  (statistics, figures, ML) is already Python. Keeping R in the loop just
+  for this one step means maintaining an R install, `spectrolab`, and an
+  R↔Python handoff indefinitely.
+- **Faster.** NumPy's vectorized, BLAS-backed operations outperform the R
+  reference on equivalent hardware.
+- **Simpler to install and pip-package.** `pip install -e .` and a single
+  `pyproject.toml` cover the whole dependency graph — no parallel R
+  environment/lockfile to keep in sync.
+
+The R implementation is kept in [`archived_r_scripts/`](../archived_r_scripts/)
+purely as the frozen reference for the parity test, not as a second
+production path.
+
+### Why not use an existing Python spectroscopy library?
+
+Before writing a from-scratch reimplementation, the obvious alternative —
+`specdal`, the closest existing community library for field spectroscopy —
+was evaluated and rejected. It falls short in four concrete ways for this
+instrument:
+
+- It's built for a different instrument's file convention (ASD, not SVC) and
+  has no logic to auto-detect this instrument's sensor boundaries from the
+  file itself — you'd have to bolt that detection on yourself, which is most
+  of the hard part of this pipeline anyway.
+- Its detector-boundary correction only shifts each sensor by a constant
+  offset. If one detector is systematically *tilted* relative to its
+  neighbor (not just offset), that tilt survives uncorrected. `spectrolab`'s
+  approach (reproduced here — see [Part 1, Stage 3](#stage-3--trim-overlap--match-sensors-step-2))
+  fixes both the offset and the tilt.
+- It doesn't trim overlapping bands where two sensors both measure the same
+  wavelength — those would either duplicate or get flattened by a plain
+  average, neither of which matches the splice-trimming this pipeline (and
+  `spectrolab`) uses.
+- It has no resolution-matched smoothing — no equivalent of
+  [Stage 4](#stage-4--resolution-matched-gaussian-smoothing-step-2)'s
+  per-detector adaptive Gaussian kernel.
+
+On top of the technical gaps, most published SVC HR-1024i work in the field
+uses `spectrolab` as the reference tool — so reproducing its exact algorithm
+(rather than approximating it with a different library) is also what keeps
+this pipeline's output comparable to the rest of the literature.
 
 ---
 
