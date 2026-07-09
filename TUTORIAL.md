@@ -392,8 +392,8 @@ instruments). The **`processing`** block holds Stage 2's scientific parameters.
 > `config/config.json`; save your personal edited version under a different name.
 
 **Optional — group repeat scans into one averaged spectrum per sample (Stage 3).**
-Add two keys pointing at a grouping CSV (same `scan_id`/`scans` + `name` schema
-described in [`naming_ids/README.md`](naming_ids/README.md)):
+Add two keys pointing at a grouping CSV (same schema used by
+[`naming_ids/`](naming_ids/README.md)):
 
 ```json
 "groups_csv": "naming_ids/my_groups.csv",
@@ -403,6 +403,24 @@ described in [`naming_ids/README.md`](naming_ids/README.md)):
 With `groups_csv` set, running `svc-pipeline` also writes a grouped/averaged CSV
 next to the merged one — no notebook needed. Omit both keys and Stage 3 simply
 doesn't run (everything else works exactly as before).
+
+**The groups CSV** has a `scans` (or `scan_id`) column and a `name` column:
+
+```csv
+scans,name
+1;2,plotA_leaf1
+3;4;5,plotA_leaf2
+6,plotA_leaf3
+```
+
+> **The one thing that trips people up:** grouping happens *within a row*.
+> Putting `1;2` in one cell averages scans 1 and 2 together into a single
+> output row. Two *separate* rows that happen to share the same `name` do
+> **not** get merged — you'd just get two un-averaged output rows with a
+> duplicate name. Numbers in one cell can be separated by `;` or `,` (use `;`
+> if your CSV itself is comma-delimited, to avoid needing to quote the cell).
+> A row named `reference` (or marked in an optional `reference` column) is
+> skipped entirely — handy for excluding a calibration panel scan.
 
 ## B3. Run it
 

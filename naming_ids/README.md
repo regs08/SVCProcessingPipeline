@@ -9,7 +9,7 @@ these columns:
 
 | Column | Meaning |
 |---|---|
-| `scan_id` or `scans` | One scan number or a comma/semicolon-separated group of scan numbers. |
+| `scan_id` or `scans` | One scan number, or a `;`/`,`-separated group of scan numbers **in the same cell** — e.g. `1;2` averages scans 1 and 2 into one output row. Two separate rows sharing the same `name` do *not* get merged; grouping is per-row. |
 | `name` | Output sample or group name. Rows named `reference` are skipped. |
 | `reference` | Optional marker column that is dropped by `GroupSpec.from_csv()`. |
 
