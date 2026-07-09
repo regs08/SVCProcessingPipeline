@@ -92,7 +92,20 @@ happen step by step, and saved averaged spectra — all without leaving Jupyter.
 ## A1. One-time setup
 
 You need **Python 3.11**. Open a terminal in the project's top folder (the one
-with `pyproject.toml`) and run these once:
+with `pyproject.toml`) and run the setup script once:
+
+```bash
+./setup.sh
+```
+
+That's it. The script creates the isolated environment, installs the pipeline
+plus its science libraries and Jupyter, and copies the example dataset into
+place. It always installs into *this* repo's `.venv` no matter which folder you
+launched it from, so the "not installable" and "No module named matplotlib"
+errors can't happen.
+
+<details>
+<summary>What the script runs (if you'd rather do it by hand)</summary>
 
 ```bash
 # 1. Create an isolated environment so this project's packages
@@ -111,6 +124,8 @@ python -m pip install jupyterlab
 python3 scripts/prepare_demo_data.py \
   --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
 ```
+
+</details>
 
 That's all the terminal work for the gentle path — from here you live in the
 notebook.
@@ -296,8 +311,14 @@ the [`pipeline/processor.py`](pipeline/processor.py) tools.
 
 ## B1. Install as a command-line tool
 
-**If you're working from a clone of this repo** (development work), install the
-full extras (adds the test/lint tools on top of the demo ones):
+**If you're working from a clone of this repo** (development work), run the setup
+script with `--dev` to add the test/lint tools on top of the demo ones:
+
+```bash
+./setup.sh --dev
+```
+
+That's the scripted equivalent of installing the full extras by hand:
 
 ```bash
 python -m pip install -e ".[dev,demo]"
@@ -484,7 +505,7 @@ svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
 | Message / symptom | What it means & the fix |
 |---|---|
 | Demo data "missing" or "failed manifest verification" | Run `python3 scripts/prepare_demo_data.py --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom`. |
-| Notebook: `ModuleNotFoundError: pipeline` / `matplotlib` | Your environment isn't installed/active. Re-run the **A1** setup, and select the `.venv` kernel in Jupyter. |
+| Notebook: `ModuleNotFoundError: pipeline` / `matplotlib` | Your environment isn't installed/active. Re-run `./setup.sh` (the **A1** setup), and select the `.venv` kernel in Jupyter. |
 | `jupyter: command not found` | Install the app: `python -m pip install jupyterlab`. |
 | `svc-pipeline: command not found` | Your environment isn't active. Run `source .venv/bin/activate`. |
 | `svc-processing: command not found` | That's the PyPI package name, not the command. The command is `svc-pipeline`. |
