@@ -2,16 +2,12 @@ name: Publish to PyPI
 
 # Fires when a version tag (e.g. v0.1.0) is pushed, or on manual dispatch.
 #
-# Authentication: this repository lives on GitHub Enterprise Server, where PyPI
-# Trusted Publishing (OIDC) is NOT available — that feature only trusts
-# github.com. So we authenticate with a PyPI API token instead. Before the
-# first release, add the token as a repository secret:
-#   Settings -> Secrets and variables -> Actions -> New repository secret
-#   Name: PYPI_API_TOKEN   Value: the token from pypi.org (starts with "pypi-")
-#
-# The runner must be able to reach pypi.org and pull the pypa publish action.
-# If your GHES runners cannot do that, publish manually instead:
-#   python -m build && python -m twine upload dist/*
+# Authentication: PyPI Trusted Publishing (OIDC) — GitHub proves this
+# workflow's identity to PyPI at upload time, no stored secret required.
+# One-time setup before the first release: on pypi.org, add a Trusted
+# Publisher for this project (or a "pending publisher" if the project
+# doesn't exist yet) with Owner "regs08", Repository
+# "SVCProcessingPipeline", Workflow "publish.yml", Environment "pypi".
 
 on:
   push:
@@ -22,6 +18,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for trusted publishing
+
     steps:
       - uses: actions/checkout@v4
 
@@ -36,5 +36,3 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}

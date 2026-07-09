@@ -37,7 +37,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.coecis.cornell.edu/GoldLab-GrapeSPEC/SVCProcessingPipeline"
+Repository = "https://github.com/regs08/SVCProcessingPipeline"
 
 [project.optional-dependencies]
 demo = [

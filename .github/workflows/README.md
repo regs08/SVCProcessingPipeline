@@ -17,14 +17,15 @@ Runs on every pull request, on pushes to `main`, and on manual dispatch
 ## [`publish.yml`](publish.yml) — Publish to PyPI
 Runs when a version tag matching `v*` (e.g. `v0.1.0`) is pushed, or on manual
 dispatch. It builds the sdist + wheel (`python -m build`) and uploads them to
-PyPI with `pypa/gh-action-pypi-publish`.
+PyPI with `pypa/gh-action-pypi-publish`, authenticating via OIDC **Trusted
+Publishing** — no stored token.
 
-**One-time setup before the first release:** this repo lives on GitHub Enterprise
-Server, where PyPI Trusted Publishing (OIDC) is unavailable, so authentication
-uses an API token. Add it as a repository secret:
+**One-time setup before the first release:** on pypi.org, add a Trusted
+Publisher for this project (or a "pending publisher" if the project doesn't
+exist there yet):
 
-> Settings → Secrets and variables → Actions → New repository secret
-> Name: `PYPI_API_TOKEN` · Value: a token from pypi.org (starts with `pypi-`)
+> Owner: `regs08` · Repository: `SVCProcessingPipeline` · Workflow file:
+> `publish.yml` · Environment: `pypi`
 
-If GHES runners cannot reach pypi.org, publish manually instead:
+If you'd rather not rely on Actions, publish manually instead:
 `python -m build && python -m twine upload dist/*`.

@@ -1,8 +1,9 @@
 # Publishing svcProcessingPipeline as a pip Package
 
-**Status (2026-06-04):** Local packaging is **complete and verified**. The only
-remaining work is the publish setup, intentionally deferred until the project
-moves to its public GitHub home — that's the final "ship it" step.
+**Status (2026-07-09):** Local packaging is **complete and verified**, and the
+project now lives at its public GitHub home, https://github.com/regs08/SVCProcessingPipeline.
+`[project.urls]` and `publish.yml` have been updated accordingly. What's left
+is the PyPI-account-side setup and the actual release — see below.
 
 ---
 
@@ -45,74 +46,48 @@ Everything below is in place and was verified on Python 3.11 in a clean venv.
 - Installed the wheel into a fresh 3.11 venv: `svc-pipeline --help` works, and
   config resolves from the working directory (verified by running from a temp
   dir containing `config/config.json`).
-- `pytest` → **28 passed, 1 skipped** (the R-parity test, which skips without
+- `pytest` → **34 passed, 1 skipped** (the R-parity test, which skips without
   reference data).
 - `ruff check .` → clean.
 
-### 🔜 Remaining — to ship (do these together, last)
+### ✅ Done — public home
 
-1. **Pick the public home.** Plan: a public **github.com** repo. (The current
-   remote is Cornell GHE Server, `github.coecis.cornell.edu`, which cannot use
-   PyPI's OIDC Trusted Publishing — that only trusts github.com.)
-2. **Update `[project.urls]` Repository** from the GHE URL to the public
-   `https://github.com/<user>/<repo>`.
-3. **Switch `publish.yml` to OIDC Trusted Publishing** (see below) — removes the
-   API-token secret entirely.
-4. **Confirm the name `svc-processing-pipeline` is free** on [pypi.org](https://pypi.org).
-5. **TestPyPI dry run** (recommended) — rehearse the upload→install round trip.
-6. **Tag and release:** `git tag v0.1.0 && git push --tags`.
+1. **Public home picked and pushed:** https://github.com/regs08/SVCProcessingPipeline
+   (`main` and `development` pushed; the old Cornell GHE remote,
+   `github.coecis.cornell.edu`, is kept as `origin` for internal work).
+2. **`[project.urls]` Repository** updated to the public URL.
+3. **`publish.yml` switched to OIDC Trusted Publishing** — no stored
+   `PYPI_API_TOKEN` secret needed anymore.
 
-Prerequisite for any publish path: a **PyPI account with 2FA enabled** (required
-to upload).
+### 🔜 Remaining — to ship
+
+1. **PyPI account with 2FA enabled** (required to upload) — do this yourself if
+   not already done.
+2. **Add the Trusted Publisher** on [pypi.org](https://pypi.org) (Publishing →
+   pending publisher, since the project doesn't exist there yet): Owner
+   `regs08` · Repository `SVCProcessingPipeline` · Workflow file `publish.yml` ·
+   Environment `pypi`.
+3. **Confirm the name `svc-processing-pipeline` is free** on pypi.org (checked
+   2026-07-09: free).
+4. **TestPyPI dry run** (recommended) — rehearse the upload→install round trip.
+5. **Tag and release:** `git tag v0.1.0 && git push public --tags`.
 
 ---
 
-## Target publish workflow (OIDC — for the public github.com repo)
+## Publish workflow (OIDC — already applied)
 
-Trusted Publishing lets GitHub Actions authenticate to PyPI with **no stored
-token**. The repo currently ships a *token-based* `publish.yml` because Cornell
-GHE Server can't do OIDC. Once the project lives on public github.com, replace it
-with this:
+`.github/workflows/publish.yml` now uses Trusted Publishing: GitHub proves
+this workflow's identity to PyPI via OIDC at upload time, so there's no
+`PYPI_API_TOKEN` secret to store or rotate. It fires on `v*` tags or manual
+dispatch, builds the sdist/wheel, and uploads with
+`pypa/gh-action-pypi-publish`.
 
-```yaml
-name: Publish to PyPI
+**One-time PyPI-side setup (not yet done — do this before the first tag):**
+on pypi.org, **Publishing → pending publisher** (the project doesn't exist on
+PyPI yet) → add a **Trusted Publisher**:
 
-on:
-  push:
-    tags:
-      - "v*"          # fires on version tags like v0.1.0
-  workflow_dispatch:
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment: pypi          # optional; lets you add release-approval rules
-    permissions:
-      id-token: write          # REQUIRED for trusted publishing — no token needed
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Build sdist and wheel
-        run: |
-          python -m pip install --upgrade build
-          python -m build
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        # no `password:` — identity is proven via OIDC
-```
-
-**One-time PyPI setup** (do this before the first tag): pypi.org → your project,
-or **Publishing → pending publisher** if the project doesn't exist yet → add a
-**Trusted Publisher**:
-
-- Owner: `<user>` · Repository: `<repo>` · Workflow file: `publish.yml` ·
-  Environment: `pypi` (only if you kept the `environment:` line).
-
-The change from the token version currently in the repo is exactly: drop
-`with: password: ${{ secrets.PYPI_API_TOKEN }}`, add `permissions: id-token: write`.
-No `PYPI_API_TOKEN` secret needed.
+- Owner: `regs08` · Repository: `SVCProcessingPipeline` · Workflow file:
+  `publish.yml` · Environment: `pypi`.
 
 ---
 
@@ -147,8 +122,10 @@ step that makes `pip install svc-processing-pipeline` work for everyone else.
 git add pyproject.toml
 git commit -m "Bump to 0.2.0"
 git tag v0.2.0
-# 3. Push commit and tag — the tag triggers publish.yml
-git push && git push --tags
+# 3. Push commit and tag to the public remote — the tag triggers publish.yml
+#    (origin is still the internal Cornell GHE mirror; publish.yml only runs
+#    on GitHub, so tags must reach the `public` remote)
+git push public && git push public --tags
 ```
 
 Optional: `pip install bump2version`, then `bump2version patch|minor|major`
