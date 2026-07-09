@@ -3,6 +3,14 @@
 Faithfully replicates the spectrolab R pipeline:
     read_spectra  →  guess_splice_at  →  match_sensors  →  smooth  →  resample(fwhm=10)
 
+This is an independent reimplementation of the *algorithm* published in the
+spectrolab R package (GPL-3; Meireles, Schweiger & Cavender-Bares, 2017,
+doi:10.5281/zenodo.3934575).  It contains no spectrolab source code — only the
+algorithm was reimplemented in NumPy/SciPy and verified numerically against
+spectrolab output.  spectrolab internal function names cited in the docstrings
+below (e.g. i_bands, i_make_fwhm) describe what each step replicates; they are
+references, not copied code.
+
 SVC .sig files store multiple sensor segments sequentially in one file, separated
 by backward wavelength jumps.  spectrolab detects these segments and applies a
 linearly-varying multiplicative correction per segment so that the sensors match
@@ -12,6 +20,8 @@ module reads .sig files directly.
 
 from __future__ import annotations
 
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -21,11 +31,11 @@ from scipy.cluster.vq import kmeans as _scipy_kmeans, vq as _scipy_vq
 
 # ── spectrolab replication constants ────────────────────────────────────────
 _FWHM_NM         = 10.0      # spectrolab resample fwhm=10
-_SIGMA_NM        = _FWHM_NM / 2.355          # Gaussian σ ≈ 4.25 nm
 _INTERP_WVL      = (5.0, 2.0)                # spectrolab interpolate_wvl default
 _FIXED_SENSOR    = 2                          # spectrolab fixed_sensor when 2 splices
 _BAND_MIN        = 400
 _BAND_MAX        = 2500
+_N_SENSORS       = 3                          # HR-1024i has three detectors → three sweeps
 
 
 # ── .sig file reader ─────────────────────────────────────────────────────────
@@ -45,11 +55,22 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
         correction = 1.2357e-05 * min(|diff(non_duplicate_bands)|)
     This causes the sensor overlap trimming logic to keep both the last band of
     sensor N and the first band of sensor N+1 when their nominal wavelengths match.
+
+    Trailing junk rows
+    ------------------
+    A correct SVC HR-1024i scan is exactly three sweeps (one per detector), so the
+    data section should contain three ascending segments. Some exported .sig files
+    carry corrupt extra rows after those three sweeps -- e.g. a stray sample near
+    "5 nm" or a duplicated fragment of an earlier detector. Left in place these show
+    up as spurious diagonal/horizontal lines in raw plots and skew reference-panel
+    detection. We therefore keep only the first three segments and drop anything
+    after them, warning so the bad file is not silently trimmed (see
+    ``_drop_trailing_junk``). Well-formed files are unaffected.
     """
     with open(path) as fh:
         lines = fh.readlines()
 
-    data_start = next(i for i, l in enumerate(lines) if l.strip() == "data=")
+    data_start = next(i for i, line in enumerate(lines) if line.strip() == "data=")
     wls, rfs = [], []
     for line in lines[data_start + 1:]:
         parts = line.split()
@@ -62,6 +83,8 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
     wls_arr = np.array(wls, dtype=float)
     rfs_arr = np.array(rfs, dtype=float)
+
+    wls_arr, rfs_arr = _drop_trailing_junk(wls_arr, rfs_arr, source=path)
 
     # Replicate spectrolab i_bands(): add a tiny correction to exact duplicates
     seen: dict[float, bool] = {}
@@ -97,6 +120,73 @@ def _sensor_segment_indices(wls: np.ndarray) -> list[tuple[int, int]]:
     return list(zip(starts.tolist(), ends.tolist()))
 
 
+def _drop_trailing_junk(
+    wls: np.ndarray,
+    rfs: np.ndarray,
+    *,
+    source: Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Discard corrupt rows that some .sig exports append after a valid scan.
+
+    Background for non-SVC readers
+    ------------------------------
+    The SVC HR-1024i has three detectors (VNIR + two SWIR). Each detector sweeps
+    from a low wavelength up to a high one, so a correct .sig file lays the data
+    out as exactly three runs of increasing wavelength, one after another:
+
+        detector 1:  ~339 -> 1010 nm
+        detector 2:  ~971 -> 1911 nm   (starts low again -> new segment)
+        detector 3: ~1892 -> 2520 nm   (starts low again -> new segment)
+
+    ``_sensor_segment_indices`` detects each "starts low again" as the boundary of
+    a new segment. A clean file therefore yields three segments. We have observed
+    exported files that contain extra rows tacked on after the third sweep -- for
+    example a single sample reported near "5 nm" (far below the instrument's range)
+    or a duplicated chunk of an earlier detector. Those rows are not real
+    measurements; they appear to be an export/instrument glitch.
+
+    Why this matters
+    ----------------
+    The junk rows are kept "in file order", so when raw spectra are plotted the line
+    jumps to the out-of-place points and back, drawing spurious diagonal/horizontal
+    streaks across the chart. They also distort summary statistics used elsewhere
+    (e.g. the median-reflectance test that flags reference panels).
+
+    What we do
+    ----------
+    Keep only the first ``_N_SENSORS`` (3) segments and drop everything after them.
+    A well-formed file has exactly three segments, so this is a no-op there. When we
+    do trim something we emit a ``UserWarning`` rather than trimming silently, so a
+    genuinely malformed file is visible to whoever is running the pipeline instead
+    of being quietly "cleaned up".
+
+    Parameters
+    ----------
+    wls, rfs : the wavelength and reflectance arrays, in original file order.
+    source   : path to the .sig file, used only to make the warning message useful.
+
+    Returns
+    -------
+    The (possibly shortened) ``(wls, rfs)`` arrays.
+    """
+    segments = _sensor_segment_indices(wls)
+    if len(segments) <= _N_SENSORS:
+        return wls, rfs
+
+    valid_end = segments[_N_SENSORS][0]   # first index past the third sweep
+    dropped = len(wls) - valid_end
+    warnings.warn(
+        f"{Path(source).name}: found {len(segments)} sensor sweeps but the "
+        f"HR-1024i has only {_N_SENSORS}. Dropping {dropped} trailing row(s) "
+        f"(wavelengths {wls[valid_end]:.1f}-{wls[-1]:.1f} nm) as corrupt export "
+        f"data. The valid scan ({valid_end} bands) is kept.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return wls[:valid_end], rfs[:valid_end]
+
+
 def _guess_splice_at(segments: list[tuple[int, int]], wls: np.ndarray) -> list[float]:
     """
     Compute splice wavelengths using spectrolab's formula:
@@ -126,7 +216,6 @@ def _trim_and_assign(
     Returns a list of (wavelength_indices, sensor_id) per sensor, matching the
     order used by match_sensors.
     """
-    n_sensors = len(segments)
     # Build per-sensor index arrays
     sensor_idx = [np.arange(s, e) for s, e in segments]
 
@@ -259,7 +348,7 @@ def _gaussian_resample(
     wls: np.ndarray,
     rfs: np.ndarray,
     target: np.ndarray,
-    sigma: float = _SIGMA_NM,
+    sigma: float,
 ) -> np.ndarray:
     """
     Gaussian-weighted resampling: replicates spectrolab's resample(fwhm=10).
@@ -275,7 +364,83 @@ def _gaussian_resample(
 
 # ── public API ───────────────────────────────────────────────────────────────
 
-def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) -> Path:
+@dataclass(frozen=True)
+class ProcessedSpectrum:
+    """All intermediate arrays and diagnostics produced for one .sig file."""
+
+    sample_name: str
+    raw_wavelengths: np.ndarray
+    raw_reflectance: np.ndarray
+    segments: tuple[tuple[int, int], ...]
+    splice_wavelengths: tuple[float, ...]
+    corrected_wavelengths: np.ndarray
+    corrected_reflectance: np.ndarray
+    output_wavelengths: np.ndarray
+    output_reflectance: np.ndarray
+
+
+def _sigma_from_fwhm(fwhm_nm: float) -> float:
+    """Convert full width at half maximum to Gaussian sigma."""
+    return fwhm_nm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+
+
+def process_sig_file(
+    path: Path,
+    *,
+    band_min: int = _BAND_MIN,
+    band_max: int = _BAND_MAX,
+    fwhm_nm: float = _FWHM_NM,
+    fixed_sensor: int = _FIXED_SENSOR,
+    interp_wvl: tuple[float, ...] = _INTERP_WVL,
+) -> ProcessedSpectrum:
+    """Process one .sig file through the parity-verified resampling path."""
+    sig_path = Path(path)
+    wls, rfs = _read_sig(sig_path)
+
+    segments = _sensor_segment_indices(wls)
+    splices: list[float] = []
+
+    if len(segments) > 1:
+        splices = _guess_splice_at(segments, wls)
+        sensor_idx = _trim_and_assign(segments, wls, splices)
+        fixed = min(fixed_sensor, len(segments))
+        merged_wls, merged_rfs = _apply_match_sensors(
+            wls, rfs, sensor_idx, splices,
+            fixed_sensor=fixed, interp_wvl=interp_wvl,
+        )
+    else:
+        merged_wls = wls
+        merged_rfs = rfs
+
+    smoothed_rfs = _smooth_fwhm(merged_wls, merged_rfs)
+    target_wls = np.arange(band_min, band_max + 1, dtype=float)
+    sigma = _sigma_from_fwhm(fwhm_nm)
+    resampled = _gaussian_resample(merged_wls, smoothed_rfs, target_wls, sigma=sigma)
+
+    return ProcessedSpectrum(
+        sample_name=sig_path.stem,
+        raw_wavelengths=wls,
+        raw_reflectance=rfs,
+        segments=tuple(segments),
+        splice_wavelengths=tuple(splices),
+        corrected_wavelengths=merged_wls,
+        corrected_reflectance=merged_rfs,
+        output_wavelengths=target_wls,
+        output_reflectance=resampled,
+    )
+
+
+def resample_spectra(
+    input_dir: Path,
+    output_dir: Path,
+    output_filename: str,
+    *,
+    band_min: int = _BAND_MIN,
+    band_max: int = _BAND_MAX,
+    fwhm_nm: float = _FWHM_NM,
+    fixed_sensor: int = _FIXED_SENSOR,
+    interp_wvl: tuple = _INTERP_WVL,
+) -> Path:
     """Load .sig files, replicate spectrolab's pipeline, and write merged CSV.
 
     Pipeline (mirrors spectrolab exactly):
@@ -289,6 +454,13 @@ def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) ->
         input_dir:       Directory containing processed .sig files.
         output_dir:      Directory where the output CSV will be written.
         output_filename: File name for the output CSV.
+        band_min:        First wavelength of the output grid (default 400 nm).
+        band_max:        Last wavelength of the output grid (default 2500 nm).
+        fwhm_nm:         FWHM of the final Gaussian resample kernel (default 10 nm).
+        fixed_sensor:    1-based index of the sensor held fixed during match_sensors
+                         (default 2).  Changing this breaks R/spectrolab parity.
+        interp_wvl:      Half-window widths (nm) used around each splice for the
+                         match_sensors correction (default (5.0, 2.0)).
 
     Returns:
         Path to the written CSV.
@@ -301,41 +473,19 @@ def resample_spectra(input_dir: Path, output_dir: Path, output_filename: str) ->
     if not sig_files:
         raise ValueError(f"No .sig files found in {input_dir}")
 
-    target_wls = np.arange(_BAND_MIN, _BAND_MAX + 1, dtype=float)
+    target_wls = np.arange(band_min, band_max + 1, dtype=float)
     rows: dict[str, np.ndarray] = {}
 
     for sig_path in sig_files:
-        wls, rfs = _read_sig(sig_path)
-
-        # ── detect sensor segments ──────────────────────────────────────────
-        segments = _sensor_segment_indices(wls)
-
-        if len(segments) > 1:
-            # ── guess_splice_at ─────────────────────────────────────────────
-            splices = _guess_splice_at(segments, wls)
-
-            # ── i_trim_sensor_overlap ────────────────────────────────────────
-            sensor_idx = _trim_and_assign(segments, wls, splices)
-
-            # ── match_sensors ────────────────────────────────────────────────
-            fixed = min(_FIXED_SENSOR, len(segments))
-            merged_wls, merged_rfs = _apply_match_sensors(
-                wls, rfs, sensor_idx, splices, fixed_sensor=fixed
-            )
-        else:
-            # Single-sensor file: no correction needed
-            merged_wls = wls
-            merged_rfs = rfs
-
-        # ── smooth() — Gaussian smooth matching spectrolab smooth(method='gaussian')
-        smoothed_rfs = _smooth_fwhm(merged_wls, merged_rfs)
-
-        # ── resample(fwhm=10) — Gaussian-weighted to 400:2500 ────────────────
-        resampled = _gaussian_resample(merged_wls, smoothed_rfs, target_wls)
-
-        # Sample name: strip .sig extension (matches specdal convention)
-        sample_name = sig_path.stem
-        rows[sample_name] = resampled
+        processed = process_sig_file(
+            sig_path,
+            band_min=band_min,
+            band_max=band_max,
+            fwhm_nm=fwhm_nm,
+            fixed_sensor=fixed_sensor,
+            interp_wvl=interp_wvl,
+        )
+        rows[processed.sample_name] = processed.output_reflectance
 
     df = pd.DataFrame(rows, index=target_wls.astype(int)).T
     df.index.name = "sample_name"

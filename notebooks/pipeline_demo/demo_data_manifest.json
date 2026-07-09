@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "dataset_id": "a4any_sb_2025-cn_ch-svc-aviris_bottom",
+  "description": "Selected 15-file SVC HR-1024i demo dataset used by notebooks/pipeline_demo.ipynb. Raw .sig files are external because headers contain GPS/location metadata.",
+  "artifact_url": null,
+  "artifact_doi": null,
+  "expected_target_dir": "notebooks/pipeline_demo/demo_data/spectra",
+  "instrument_serial": "2212118",
+  "file_count": 15,
+  "files": [
+    {
+      "name": "bottom.HR.072825..0000.sig",
+      "size_bytes": 40096,
+      "sha256": "b1a2aed934c4efacc7d64873656140d650e36d7516ef542741cde5e181532e46",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0001.sig",
+      "size_bytes": 40096,
+      "sha256": "39dd362a315336cf2e3cc8eb33f2afbab9f6f69532cb4d256e0aeeb45367ecb7",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0002.sig",
+      "size_bytes": 40096,
+      "sha256": "be269fb68e6eee8ddb8bc671b03ef028fce176aecc3018de3843d303950d42d0",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0003.sig",
+      "size_bytes": 40096,
+      "sha256": "51debf50be8b0c069d9571b5a5e97fd7059280a96006d1fce24ca6a2c3b112b0",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0004.sig",
+      "size_bytes": 40096,
+      "sha256": "3e0d04b9a64b96db730cab998a94eb66d270d3f3cf3bc1c4307e4fa1a8e0f2dc",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0005.sig",
+      "size_bytes": 40096,
+      "sha256": "47caf3abefa20ba096c65784e0e2dd33947e9a406a6ca44c974a9b71388fa6fb",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0006.sig",
+      "size_bytes": 40096,
+      "sha256": "0fae7ac7933c5f7c2dc903e14ee56a66e26b937d977e418ec629c14d9ce40b71",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0007.sig",
+      "size_bytes": 40096,
+      "sha256": "b6b058cb29936944708bbc2a01101f323263aaf1ce5bb561a4dbf47a8de5f3f4",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0008.sig",
+      "size_bytes": 40096,
+      "sha256": "b9e6bc9dba63aad32253162faa27c0bec78373d76bd9be13a925ce342fe95dce",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0009.sig",
+      "size_bytes": 40096,
+      "sha256": "d33172a2492f46a90a9677c374bb3b335cb4009f282f044f665ecd417f9fce43",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0010.sig",
+      "size_bytes": 40096,
+      "sha256": "2c857fcd5c132869a892c9bf83f3aa03efd7460f7fab29222f4ae347a7ee0953",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0011.sig",
+      "size_bytes": 40096,
+      "sha256": "7e60905a711b817955c843f6d7241552b5bfb168c8a2767f0e9bedbfee59c68a",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0012.sig",
+      "size_bytes": 40096,
+      "sha256": "24b59d162963efed87d3882fcfd9ab2f443a885a2d9ec1d609183d9973a65206",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0013.sig",
+      "size_bytes": 40096,
+      "sha256": "81f26cab6eab3413af4083e6b0a99e657d08fdee29690dec7df3bdab8a28813f",
+      "instrument_serial": "2212118"
+    },
+    {
+      "name": "bottom.HR.072825..0014.sig",
+      "size_bytes": 40096,
+      "sha256": "f6fb2222c9b80ab79aaf45f9704d710b1a915b849e18cdf0145eada3e47ea770",
+      "instrument_serial": "2212118"
+    }
+  ]
+}

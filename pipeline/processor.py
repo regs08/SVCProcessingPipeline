@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import re
 import warnings
 from collections import namedtuple
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Literal, Optional, Sequence, Union
+from typing import Literal
 
 import pandas as pd
 
@@ -15,7 +18,7 @@ GroupTuple = namedtuple("GroupTuple", ["members", "name"])
 class GroupSpec:
     """Tuple-like specification for grouping spectra, with optional display name."""
     members: Sequence[int]
-    name: Optional[str] = None
+    name: str | None = None
 
     def __post_init__(self):
         normalized_members = tuple(int(m) for m in self.members)
@@ -27,7 +30,7 @@ class GroupSpec:
     @classmethod
     def from_csv(
         cls,
-        csv_path: Union[str, Path],
+        csv_path: str | Path,
         *,
         members_column: str = "scans",
         id_column: str = "scan_id",
@@ -35,7 +38,7 @@ class GroupSpec:
         exclude_columns: Sequence[str] = ("reference",),
         delimiter: str = ",",
         return_namedtuple: bool = True,
-    ) -> List[Union["GroupSpec", GroupTuple]]:
+    ) -> list["GroupSpec" | GroupTuple]:
         df = pd.read_csv(csv_path)
 
         column_lookup = {col.lower(): col for col in df.columns}
@@ -60,7 +63,7 @@ class GroupSpec:
         if resolved_name_col is None:
             raise KeyError(f"Column '{name_column}' not found in {csv_path}.")
 
-        specs: List[Union["GroupSpec", GroupTuple]] = []
+        specs: list["GroupSpec" | GroupTuple] = []
         for _, row in df.iterrows():
             if resolved_members_col is not None:
                 members_value = row[resolved_members_col]
@@ -98,6 +101,11 @@ class SVCDataProcessor:
     SAMPLE_NAME_PATTERN = re.compile(r"^(?P<base>.+?)\.(?P<num>\d+)(?:\.sig)?$", re.IGNORECASE)
     TRAILING_DIGITS_PATTERN = re.compile(r"^(?P<base>.*?)(?P<num>\d+)(?:\.sig)?$", re.IGNORECASE)
 
+    def _require_attributes(self, *names: str, message: str) -> None:
+        missing = [name for name in names if not hasattr(self, name)]
+        if missing:
+            raise RuntimeError(message)
+
     # ---------- IO ----------
     def load_csv(self, file_path: str, **kwargs):
         """Load CSV file. Pass any additional pandas.read_csv() arguments via kwargs."""
@@ -105,17 +113,17 @@ class SVCDataProcessor:
         return self
 
     # ---------- Structure ----------
-    def split_columns(self, name_col: Optional[str] = None):
-        assert hasattr(self, "df"), "Call load_csv first."
+    def split_columns(self, name_col: str | None = None):
+        self._require_attributes("df", message="Call load_csv first.")
         self.name_col: str = name_col or self.df.columns[0]
         num_cols = self.df.select_dtypes(include='number').columns.tolist()
         xlike_cols = [c for c in self.df.columns if isinstance(c, str) and c.startswith("X")]
-        self.wavelength_cols: List[str] = list(dict.fromkeys(num_cols + xlike_cols))
+        self.wavelength_cols: list[str] = list(dict.fromkeys(num_cols + xlike_cols))
         return self
 
     # ---------- Parsing ----------
     @classmethod
-    def normalize_sample_name(cls, value: Union[str, int, float]) -> str:
+    def normalize_sample_name(cls, value: str | int | float) -> str:
         raw = "" if value is None else str(value).strip()
         if not raw:
             raise ValueError("Sample name is empty or None.")
@@ -152,7 +160,7 @@ class SVCDataProcessor:
         return target
 
     def extract_sig_entries(self):
-        assert hasattr(self, "df") and hasattr(self, "name_col"), "Call split_columns first."
+        self._require_attributes("df", "name_col", message="Call split_columns first.")
         names = self.df[self.name_col].astype(str).tolist()
         out = []
         for i, n in enumerate(names):
@@ -169,20 +177,16 @@ class SVCDataProcessor:
                 out.append(
                     self.SigEntry(index=i, base_name=n, number=None)
                 )
-        self.entries: List[self.SigEntry] = out
+        self.entries: list[self.SigEntry] = out
         return self
 
     # ---------- Grouping ----------
     @staticmethod
-    def _ensure_iterable_group(g: Union[int, Iterable[int]]) -> Iterable[int]:
+    def _ensure_iterable_group(g: int | Iterable[int]) -> Iterable[int]:
         return (g,) if isinstance(g, int) else g
 
-    def group_by(self, groups: Sequence[Union[int, Iterable[int]]], *, by: Literal["number", "index"] = "number"):
-        assert hasattr(self, "entries"), "Call extract_sig_entries first."
-
-        def _simple_warn_format(message, category, filename, lineno, line=None):
-            return f"{category.__name__}: {message}\n"
-        warnings.formatwarning = _simple_warn_format
+    def group_by(self, groups: Sequence[int | Iterable[int]], *, by: Literal["number", "index"] = "number"):
+        self._require_attributes("entries", message="Call extract_sig_entries first.")
 
         available_values = {getattr(e, by) for e in self.entries}
         lookup = {}
@@ -190,12 +194,12 @@ class SVCDataProcessor:
             key = getattr(e, by)
             lookup.setdefault(key, []).append(e)
 
-        grouped: List[List[self.SigEntry]] = []
+        grouped: list[list[self.SigEntry]] = []
         used_values = set()
 
         for g in groups:
             vals = self._ensure_iterable_group(g)
-            bucket: List[self.SigEntry] = []
+            bucket: list[self.SigEntry] = []
             for val in vals:
                 if val not in available_values:
                     warnings.warn(f"Cannot find {by}={val}", UserWarning)
@@ -212,13 +216,13 @@ class SVCDataProcessor:
                 UserWarning
             )
 
-        self.grouped_entries: List[List[self.SigEntry]] = grouped
-        self.ungrouped_entries: List[self.SigEntry] = ungrouped_entries
+        self.grouped_entries: list[list[self.SigEntry]] = grouped
+        self.ungrouped_entries: list[self.SigEntry] = ungrouped_entries
         return self
 
     # ---------- Averaging ----------
     @staticmethod
-    def _select_numeric_cols(df: pd.DataFrame, cols: Optional[Iterable[str]]) -> List[str]:
+    def _select_numeric_cols(df: pd.DataFrame, cols: Iterable[str] | None) -> list[str]:
         return list(cols) if cols is not None else list(df.select_dtypes(include="number").columns)
 
     @staticmethod
@@ -229,7 +233,7 @@ class SVCDataProcessor:
             raise IndexError(f"Group {group_id} has out-of-bounds indices {bad} for DataFrame with {n} rows.")
 
     @staticmethod
-    def _row_indices(group: Sequence["SVCDataProcessor.SigEntry"]) -> List[int]:
+    def _row_indices(group: Sequence["SVCDataProcessor.SigEntry"]) -> list[int]:
         return [e.index for e in group]
 
     @staticmethod
@@ -297,14 +301,20 @@ class SVCDataProcessor:
     def average_groups(
         self,
         *,
-        cols: Optional[Iterable[str]] = None,
+        cols: Iterable[str] | None = None,
         index_base: int = 1,
         name_strategy: str = "base_first",
-        base_name: Optional[str] = None,
+        base_name: str | None = None,
         agg_method: Literal["mean", "median", "sum", "min", "max"] = "mean",
-        override_names: Optional[Sequence[Optional[str]]] = None,
+        override_names: Sequence[str | None] | None = None,
     ):
-        assert hasattr(self, "df") and hasattr(self, "grouped_entries") and hasattr(self, "wavelength_cols") and hasattr(self, "name_col"), "Run previous steps first."
+        self._require_attributes(
+            "df",
+            "grouped_entries",
+            "wavelength_cols",
+            "name_col",
+            message="Run previous steps first.",
+        )
 
         use_cols = self._select_numeric_cols(self.df, cols or self.wavelength_cols)
         name_col = self.name_col
@@ -347,7 +357,7 @@ class SVCDataProcessor:
 
     # ---------- Ungrouped summary ----------
     @staticmethod
-    def ungrouped_entries_to_df(ungrouped: List["SVCDataProcessor.SigEntry"]) -> pd.DataFrame:
+    def ungrouped_entries_to_df(ungrouped: list["SVCDataProcessor.SigEntry"]) -> pd.DataFrame:
         if not ungrouped:
             return pd.DataFrame(columns=["index", "number", "base_name"])
         return pd.DataFrame([{"index": e.index, "number": e.number, "base_name": e.base_name} for e in ungrouped])
@@ -364,10 +374,17 @@ class SVCDataProcessor:
         index_base: int = 1
     ):
         """Stack self.grouped_df with ungrouped entries (raw spectra or empty spectral cells)."""
-        assert hasattr(self, "grouped_df"), "Call average_groups first."
-        assert hasattr(self, "ungrouped_entries"), "Call group_by first to populate ungrouped_entries."
-        assert hasattr(self, "df") and hasattr(self, "wavelength_cols") and hasattr(self, "name_col"), \
-            "Ensure load_csv/split_columns ran."
+        self._require_attributes("grouped_df", message="Call average_groups first.")
+        self._require_attributes(
+            "ungrouped_entries",
+            message="Call group_by first to populate ungrouped_entries.",
+        )
+        self._require_attributes(
+            "df",
+            "wavelength_cols",
+            "name_col",
+            message="Ensure load_csv/split_columns ran.",
+        )
 
         grouped = self.grouped_df.copy()
 
@@ -393,7 +410,7 @@ class SVCDataProcessor:
     # ---------- Pretty prints ----------
     def debug_print_groups(self):
         """Print groups and ungrouped entries with clear headers and spacing."""
-        assert hasattr(self, "grouped_entries"), "Call group_by first."
+        self._require_attributes("grouped_entries", message="Call group_by first.")
 
         print("#### Group Entries ####\n")
         print("Number of groups:", len(self.grouped_entries), "\n")
@@ -417,7 +434,7 @@ class SVCDataProcessor:
 
     # ---------- Save ----------
     def save_csv(self, out_path: str):
-        assert hasattr(self, "grouped_df"), "Call average_groups first."
+        self._require_attributes("grouped_df", message="Call average_groups first.")
         self.grouped_df.to_csv(out_path, index=False)
         return self
 
@@ -446,10 +463,10 @@ class SigSpectraAverager:
         return cls(df, sample_col=sample_col)
 
     @staticmethod
-    def _normalize_groups(groups: Sequence[Union[int, Iterable[int]]]) -> List[dict]:
-        normalized: List[dict] = []
+    def _normalize_groups(groups: Sequence[int | Iterable[int]]) -> list[dict]:
+        normalized: list[dict] = []
         for g in groups:
-            custom_name: Optional[str] = None
+            custom_name: str | None = None
 
             if isinstance(g, GroupSpec):
                 members_source = g.members
@@ -470,7 +487,7 @@ class SigSpectraAverager:
                 members_source = (g,)
 
             if isinstance(members_source, Iterable) and not isinstance(members_source, (str, bytes)):
-                flattened: List[int] = []
+                flattened: list[int] = []
                 for value in members_source:
                     if isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
                         flattened.extend(int(v) for v in value)
@@ -485,12 +502,12 @@ class SigSpectraAverager:
 
     def aggregate(
         self,
-        groups: Sequence[Union[int, Iterable[int]]],
-        method: Optional[Literal["mean", "median", "sum", "min", "max"]] = "mean",
+        groups: Sequence[int | Iterable[int]],
+        method: Literal["mean", "median", "sum", "min", "max"] | None = "mean",
         *,
         index_base: int = 1,
         name_strategy: str = "base_first",
-        base_name: Optional[str] = None,
+        base_name: str | None = None,
     ) -> pd.DataFrame:
         normalized_groups = self._normalize_groups(groups)
         member_sets = [spec["members"] for spec in normalized_groups]
@@ -500,13 +517,10 @@ class SigSpectraAverager:
 
         if method is None:
             grouped_frames = []
-            for name_spec, members in zip(normalized_groups, member_sets):
-                rows = []
-                for entry in self.processor.entries:
-                    if entry.number in members:
-                        rows.append(entry.index)
-                if not rows:
+            for name_spec, group in zip(normalized_groups, self.processor.grouped_entries):
+                if not group:
                     continue
+                rows = [entry.index for entry in group]
                 subset = self.processor.df.iloc[rows].copy()
                 override_name = name_spec.get("name")
                 if override_name:
@@ -537,7 +551,7 @@ def find_spectra_by_name(
     if not search_key:
         raise ValueError("search_key must be a non-empty string.")
 
-    results: List[pd.DataFrame] = []
+    results: list[pd.DataFrame] = []
     for idx, df in enumerate(dataframes):
         if name_column not in df.columns:
             raise KeyError(f"DataFrame at position {idx} lacks the '{name_column}' column.")

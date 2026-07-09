@@ -1,5 +1,0 @@
-specdal
-pandas
-numpy
-scipy
-pytest>=8.3.0
