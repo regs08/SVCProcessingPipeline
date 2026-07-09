@@ -119,16 +119,31 @@ class PipelineConfig:
         output_folder: Path,
         instrument: str,
         processing: dict,
+        end_line: str | None = None,
     ) -> None:
         self.data_folder = data_folder      # folder of raw .sig files
         self.output_folder = output_folder  # where processed files and CSVs are written
         self.instrument = instrument        # "bronze" / "silver" (resolved)
         self.processing = processing        # config.json-style processing block
+        self._end_line_override = end_line  # None -> use the instrument's default
 
     @property
     def processed_folder(self) -> Path:
         """Where Stage 1 writes the truncated .sig files."""
         return self.output_folder / "processed_sig"
+
+    @property
+    def end_line(self) -> str:
+        """The wavelength row where Stage 1 truncates each raw .sig file.
+
+        Returns the value you set explicitly (via ``build_config(end_line=...)``),
+        otherwise the instrument's calibrated default from
+        ``SigFileProcessor.DEFAULT_CORRECTION_TYPES`` ("2520.4" for bronze,
+        "2517.9" for silver).
+        """
+        if self._end_line_override is not None:
+            return self._end_line_override
+        return SigFileProcessor.DEFAULT_CORRECTION_TYPES[self.instrument]
 
     @property
     def resampler_kwargs(self) -> dict:
@@ -141,6 +156,8 @@ class PipelineConfig:
             f"  data folder   : {self.data_folder}\n"
             f"  output folder : {self.output_folder}\n"
             f"  instrument    : {self.instrument}\n"
+            f"  end line      : {self.end_line} nm"
+            f"{' (custom)' if self._end_line_override is not None else ''}\n"
             f"  band range    : {self.processing['band_min']}-{self.processing['band_max']} nm\n"
             f"  resample FWHM : {self.processing['resample_fwhm_nm']} nm\n"
         )
@@ -159,16 +176,46 @@ class PipelineConfig:
                 "--source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom\n"
                 "  - Using your own data? Set DATA_FOLDER to the folder holding your .sig files."
             )
+        self._warn_if_end_line_unmatched(sig_files)
         self.processed_folder.mkdir(parents=True, exist_ok=True)
-        SigFileProcessor(correction_type=self.instrument).process_sig_files(
+        # Truncate at the resolved end line (instrument default, or your override).
+        SigFileProcessor(
+            correction_value=self.end_line,
+            instrument_number=SigFileProcessor.DEFAULT_INSTRUMENT_NUMBERS.get(self.instrument),
+        ).process_sig_files(
             input_folder=str(self.data_folder),
             output_folder=str(self.processed_folder),
             verbose=verbose,
         )
-        print(f"Stage 1 complete - truncated {len(sig_files)} file(s)")
+        print(f"Stage 1 complete - truncated {len(sig_files)} file(s) at {self.end_line} nm")
         print(f"  raw       : {self.data_folder}")
         print(f"  processed : {self.processed_folder}")
         return self
+
+    def _warn_if_end_line_unmatched(self, sig_files: list[Path]) -> None:
+        """Warn when the chosen end line appears in none of the raw files.
+
+        Stage 1 truncates a file at the first line that *starts with* the end
+        line. If no line matches, that file is copied through untouched, and its
+        trailing rows resurface later as "found N sensor sweeps" warnings from the
+        resampler. Catching it here tells you to adjust the end line instead.
+        """
+        end_line = self.end_line
+        unmatched = []
+        for path in sig_files:
+            with path.open() as handle:
+                if not any(line.startswith(end_line) for line in handle):
+                    unmatched.append(path.name)
+        if unmatched:
+            preview = ", ".join(unmatched[:3]) + (" ..." if len(unmatched) > 3 else "")
+            warnings.warn(
+                f"End line {end_line!r} was not found in {len(unmatched)} of "
+                f"{len(sig_files)} file(s) ({preview}); those files will NOT be "
+                "truncated. If you see resampler warnings later, set END_LINE in the "
+                "settings cell to a wavelength that appears near the end of your scans.",
+                UserWarning,
+                stacklevel=3,
+            )
 
     def to_json(self, path) -> Path:
         """Save these settings as a ``config/config.json``-compatible file.
@@ -187,7 +234,7 @@ class PipelineConfig:
             "merged_csv_name": "merged_spectra.csv",
             "instrument": {
                 self.instrument: {
-                    "end_line": SigFileProcessor.DEFAULT_CORRECTION_TYPES.get(self.instrument, ""),
+                    "end_line": self.end_line,
                 }
             },
             "processing": dict(self.processing),
@@ -203,11 +250,18 @@ class PipelineConfig:
         with Path(path).open() as handle:
             data = json.load(handle)
         processing = {**PARITY_PROCESSING_DEFAULTS, **(data.get("processing") or {})}
+        # Pick up a custom end_line if the file's instrument block carries one.
+        end_line = None
+        for entry in (data.get("instrument") or {}).values():
+            if isinstance(entry, dict) and entry.get("end_line"):
+                end_line = str(entry["end_line"])
+                break
         return build_config(
             data_folder=data["sig_input_dir"],
             output_folder=data.get("output_dir", "pipeline_outputs/notebook_run"),
             instrument=instrument,
             processing=processing,
+            end_line=end_line,
         )
 
 
@@ -243,6 +297,7 @@ def build_config(
     output_folder="pipeline_outputs/notebook_run",
     instrument: str = "auto",
     processing: dict | None = None,
+    end_line: str | float | None = None,
 ) -> PipelineConfig:
     """Build a :class:`PipelineConfig` from a few friendly settings.
 
@@ -253,9 +308,22 @@ def build_config(
     instrument    : "auto" (detect from the file headers), or "bronze" / "silver"
     processing    : optional override of the Stage 2 parameters (config.json shape);
                     omit to use the parity-verified defaults
+    end_line      : optional Stage 1 truncation wavelength (e.g. "2517.9"); omit to
+                    use the instrument's calibrated default. Set this when the
+                    default end line does not match where your scans actually end.
     """
     data_folder = Path(data_folder).expanduser()
     output_folder = Path(output_folder).expanduser()
+
+    normalized_end_line: str | None = None
+    if end_line is not None:
+        normalized_end_line = str(end_line).strip()
+        try:
+            float(normalized_end_line)
+        except ValueError:
+            raise ValueError(
+                f'end_line must be a wavelength number like "2517.9" (got {end_line!r}).'
+            )
 
     if instrument == "auto":
         resolved_instrument = _detect_instrument(data_folder)
@@ -282,6 +350,7 @@ def build_config(
         output_folder=output_folder,
         instrument=resolved_instrument,
         processing=merged_processing,
+        end_line=normalized_end_line,
     )
 
 
