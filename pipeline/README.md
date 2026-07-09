@@ -13,6 +13,7 @@ Thin glue, no config or processing logic of its own: parses arguments, configure
 ### [`run_config.py`](run_config.py) — `RunConfig`, `PipelineSettings`
 Encapsulates *what to run*. `RunConfig.load(repo_root, name, logger)` resolves the config path (bare names fall back under [`config/`](../config/) and gain a `.json` suffix), parses + validates the JSON, and exposes:
 
+- `RunConfig.write_starter_config(base_dir)` (classmethod) — write a starter `config/config.json` (same template as the one shipped in this repo) under `base_dir`; refuses to overwrite an existing file. Backs `svc-pipeline --init-config`, which is how an installed-from-PyPI user (no repo clone, so no `config/` directory to copy) gets a starting template.
 - `.ensure_no_placeholder(input_dir_override)` — abort with guidance if the template's `<PATH_TO_SIG_INPUT_ROOT>` was never edited.
 - `.input_directories()` — expand `sig_input_dir` / `sig_input_dirs` / `process_all_subdirs` into the directories to process.
 - `.processing_params()` — the `processing` block merged over the parity-verified defaults (cached; warns once on any non-parity value).

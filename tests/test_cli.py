@@ -73,6 +73,36 @@ def test_main_input_dir_override_bypasses_config_input_and_placeholder(
     assert "not produced" in captured.out
 
 
+def test_main_init_config_writes_starter_and_exits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["svc-pipeline", "--init-config"])
+
+    main()
+
+    written = tmp_path / "config" / "config.json"
+    assert written.is_file()
+    assert json.loads(written.read_text())["sig_input_dir"] == "<PATH_TO_SIG_INPUT_ROOT>"
+    assert str(written.resolve()) in capsys.readouterr().out
+
+
+def test_main_init_config_refuses_to_overwrite_existing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / "config" / "config.json"
+    existing.parent.mkdir()
+    existing.write_text('{"already": "here"}')
+    monkeypatch.setattr(sys, "argv", ["svc-pipeline", "--init-config"])
+
+    with pytest.raises(SystemExit, match="already exists"):
+        main()
+
+
 def test_main_exits_on_placeholder_without_input_dir_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

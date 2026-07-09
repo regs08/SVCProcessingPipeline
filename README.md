@@ -32,6 +32,20 @@ Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeli
 > New to the pipeline? [`TUTORIAL.md`](TUTORIAL.md) starts with the interactive
 > Jupyter notebook (the gentle path) and has an advanced track for the CLI below.
 
+**Installed from PyPI, in a new project folder** (no clone of this repo needed):
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install svc-processing
+
+svc-pipeline --init-config   # writes a starter config/config.json here
+# Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
+svc-pipeline
+```
+
+**Working from a clone of this repo** (config/config.json already exists):
+
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate

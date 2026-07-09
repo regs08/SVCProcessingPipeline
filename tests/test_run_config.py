@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -19,6 +20,26 @@ def test_resolve_path_finds_bare_config_name(tmp_path: Path) -> None:
     config_path.write_text("{}")
 
     assert RunConfig._resolve_path(tmp_path, "demo") == config_path
+
+
+def test_write_starter_config_creates_config_json_with_placeholder(tmp_path: Path) -> None:
+    target = RunConfig.write_starter_config(tmp_path)
+
+    assert target == tmp_path / "config" / "config.json"
+    data = json.loads(target.read_text())
+    assert data["sig_input_dir"] == "<PATH_TO_SIG_INPUT_ROOT>"
+    assert data["processing"]["band_min"] == 400
+
+
+def test_write_starter_config_refuses_to_overwrite_existing(tmp_path: Path) -> None:
+    existing = tmp_path / "config" / "config.json"
+    existing.parent.mkdir()
+    existing.write_text('{"already": "here"}')
+
+    with pytest.raises(SystemExit, match="already exists"):
+        RunConfig.write_starter_config(tmp_path)
+
+    assert json.loads(existing.read_text()) == {"already": "here"}
 
 
 def test_placeholder_guard_exits_with_guidance(tmp_path: Path) -> None:

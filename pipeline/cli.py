@@ -50,6 +50,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose logging before and after each processing step",
     )
+    parser.add_argument(
+        "--init-config",
+        action="store_true",
+        help="Write a starter config/config.json in the current directory and exit.",
+    )
     return parser.parse_args()
 
 
@@ -61,6 +66,13 @@ def main() -> None:
     # working directory so the installed `svc-pipeline` command works from any
     # directory. Absolute paths in the config are always honoured as-is.
     base_dir = Path.cwd()
+
+    if args.init_config:
+        target = RunConfig.write_starter_config(base_dir)
+        print(f"Wrote starter config: {target.resolve()}")
+        print('Edit "sig_input_dir" to point at your .sig data, then run: svc-pipeline')
+        return
+
     run_config = RunConfig.load(base_dir, str(args.config), logger)
     run_config.ensure_no_placeholder(args.input_dir)
 

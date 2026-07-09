@@ -34,6 +34,24 @@ _PARITY_DEFAULTS: dict[str, Any] = {
 
 _PLACEHOLDER = "<PATH_TO_SIG_INPUT_ROOT>"
 
+# Starter template written by `svc-pipeline --init-config`. Mirrors the
+# repo's own config/config.json — keep the two in sync if either changes.
+_STARTER_CONFIG_TEMPLATE: dict[str, Any] = {
+    "sig_input_dir": _PLACEHOLDER,
+    "process_all_subdirs": True,
+    "processed_dir": "sig_processed",
+    "resampled_dir": "sig_resampled",
+    "output_dir": "pipeline_outputs",
+    "summary_csv_name": "processed_sig_summary.csv",
+    "merged_csv_name": "merged_spectra.csv",
+    "end_line_overrides": {},
+    "instrument": {
+        "bronze": {"end_line": "2520.4", "serial": "2212118"},
+        "silver": {"end_line": "2517.9", "serial": "1202103"},
+    },
+    "processing": dict(_PARITY_DEFAULTS),
+}
+
 
 def _resolve_under(base: Path, value: str) -> Path:
     """Resolve ``value`` against ``base`` unless it is already absolute."""
@@ -86,6 +104,25 @@ class RunConfig:
         data = cls._read_json(path)
         logger.info("Using config: %s", path)
         return cls(data, path=path, base_dir=base_dir, logger=logger)
+
+    @classmethod
+    def write_starter_config(cls, base_dir: Path, *, filename: str = "config.json") -> Path:
+        """Write a starter ``config/<filename>`` under ``base_dir`` and return its path.
+
+        Refuses to overwrite an existing file, so re-running this never clobbers
+        edits you've already made.
+        """
+        target = base_dir / "config" / filename
+        if target.exists():
+            raise SystemExit(
+                f"{target} already exists — not overwriting.\n"
+                f"  Edit it directly, or remove it first to regenerate the starter template."
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("w") as handle:
+            json.dump(_STARTER_CONFIG_TEMPLATE, handle, indent=2)
+            handle.write("\n")
+        return target
 
     @staticmethod
     def _resolve_path(base_dir: Path, value: str) -> Path:

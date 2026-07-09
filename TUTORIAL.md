@@ -314,6 +314,11 @@ A **config** is a small JSON file telling the pipeline *where your data is* and
 *where to put the results*. The shipped template is
 [`config/config.json`](config/config.json):
 
+> **Starting from a fresh `pip install svc-processing` with no repo clone?**
+> There's no `config/config.json` to copy — run `svc-pipeline --init-config`
+> in your project folder to generate the same starter template shown below,
+> then edit it as described here.
+
 ```json
 {
   "sig_input_dir": "<PATH_TO_SIG_INPUT_ROOT>",
