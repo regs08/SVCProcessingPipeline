@@ -14,4 +14,7 @@ these columns:
 | `reference` | Optional marker column that is dropped by `GroupSpec.from_csv()`. |
 
 Use `pipeline.processor.GroupSpec.from_csv()` or
-`pipeline.processor.SigSpectraAverager` to consume these tables.
+`pipeline.processor.SigSpectraAverager` to consume these tables from Python
+(notebook workflows). From the terminal, point `svc-pipeline` at one of these
+files via the config's `groups_csv` key or the `--groups-csv` flag — see
+[`config/README.md`](../config/README.md#grouping--stage-3-optional).

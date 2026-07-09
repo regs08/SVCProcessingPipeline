@@ -124,3 +124,58 @@ def test_settings_for_resolves_output_paths(tmp_path: Path) -> None:
     assert settings.merged_csv_name == "example_input_merged_spectra.csv"
     assert settings.correction_types["silver"] == "2517.9"
     assert settings.instrument_numbers["silver"] == "1202103"
+
+
+def test_settings_for_grouping_defaults_when_unconfigured(tmp_path: Path) -> None:
+    data = {
+        "processed_dir": "sig_processed",
+        "resampled_dir": "sig_resampled",
+        "summary_csv_name": "summary.csv",
+        "merged_csv_name": "merged.csv",
+    }
+    config = RunConfig(data, path=tmp_path / "config.json", base_dir=tmp_path, logger=_logger())
+
+    settings = config.settings_for(Path("example_input"), verbose=False)
+
+    assert settings.groups_csv is None
+    assert settings.group_agg_method == "mean"
+    assert settings.grouped_csv_name == "example_input_grouped_spectra.csv"
+
+
+def test_settings_for_resolves_groups_csv_from_config(tmp_path: Path) -> None:
+    data = {
+        "processed_dir": "sig_processed",
+        "resampled_dir": "sig_resampled",
+        "summary_csv_name": "summary.csv",
+        "merged_csv_name": "merged.csv",
+        "groups_csv": "naming_ids/groups.csv",
+        "group_agg_method": "median",
+    }
+    config = RunConfig(data, path=tmp_path / "config.json", base_dir=tmp_path, logger=_logger())
+
+    settings = config.settings_for(Path("example_input"), verbose=False)
+
+    assert settings.groups_csv == tmp_path / "naming_ids/groups.csv"
+    assert settings.group_agg_method == "median"
+
+
+def test_settings_for_cli_overrides_take_priority_over_config(tmp_path: Path) -> None:
+    data = {
+        "processed_dir": "sig_processed",
+        "resampled_dir": "sig_resampled",
+        "summary_csv_name": "summary.csv",
+        "merged_csv_name": "merged.csv",
+        "groups_csv": "naming_ids/groups.csv",
+        "group_agg_method": "mean",
+    }
+    config = RunConfig(data, path=tmp_path / "config.json", base_dir=tmp_path, logger=_logger())
+
+    settings = config.settings_for(
+        Path("example_input"),
+        verbose=False,
+        groups_csv_override=tmp_path / "override_groups.csv",
+        group_method_override="max",
+    )
+
+    assert settings.groups_csv == tmp_path / "override_groups.csv"
+    assert settings.group_agg_method == "max"

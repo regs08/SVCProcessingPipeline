@@ -76,6 +76,9 @@ class PipelineSettings:
     processing_params: dict
     correction_types: dict[str, str]
     instrument_numbers: dict[str, str]
+    groups_csv: Path | None
+    group_agg_method: str
+    grouped_csv_name: str
 
 
 class RunConfig:
@@ -299,7 +302,14 @@ class RunConfig:
             self._logger.info("Instrument serials from config: %s", serials)
         return correction_types, instrument_numbers
 
-    def settings_for(self, input_dir: Path, *, verbose: bool) -> PipelineSettings:
+    def settings_for(
+        self,
+        input_dir: Path,
+        *,
+        verbose: bool,
+        groups_csv_override: str | Path | None = None,
+        group_method_override: str | None = None,
+    ) -> PipelineSettings:
         """Build the fully-resolved :class:`PipelineSettings` for one input directory."""
         input_dir = Path(input_dir).expanduser()
         source_name = input_dir.name or "sig_input"
@@ -325,6 +335,11 @@ class RunConfig:
             if key is not None
         }
 
+        groups_csv_value = groups_csv_override or self.data.get("groups_csv")
+        groups_csv = _resolve_under(self.base_dir, str(groups_csv_value)) if groups_csv_value else None
+        group_agg_method = str(group_method_override or self.data.get("group_agg_method", "mean"))
+        grouped_csv_name = f"{source_name}_{self.data.get('grouped_csv_name', 'grouped_spectra.csv')}"
+
         return PipelineSettings(
             source_name=source_name,
             input_dir=input_dir,
@@ -337,4 +352,7 @@ class RunConfig:
             processing_params=self.processing_params(),
             correction_types=correction_types,
             instrument_numbers=instrument_numbers,
+            groups_csv=groups_csv,
+            group_agg_method=group_agg_method,
+            grouped_csv_name=grouped_csv_name,
         )

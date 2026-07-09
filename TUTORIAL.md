@@ -69,12 +69,14 @@ different doors into the same three stages.** You don't need both.
 | Path | What it runs | What you get | Best for |
 |---|---|---|---|
 | **🌱 Notebook** | Stages **1 → 2 → 3**, interactively, with a plot at each step | Figures **and** CSVs | Learning, checking a new dataset, exploring, making figures, small jobs |
-| **⚙️ `svc-pipeline` (CLI)** | Stages **1 + 2** in one batch command (Stage 3 done separately) | The merged CSV, no plots | Processing many folders the same way, reproducibly |
+| **⚙️ `svc-pipeline` (CLI)** | Stages **1 + 2**, and **3** too if you've set `groups_csv` in the config (or pass `--groups-csv`) | The merged CSV, plus a grouped/averaged CSV if Stage 3 ran; no plots | Processing many folders the same way, reproducibly |
 
 The notebook does it all from inside Jupyter: its setup cell performs **Stage 1**,
 the `.process()` calls perform **Stage 2**, and the averaging cell performs
 **Stage 3**. So when you work in the notebook, you are running the complete
-pipeline yourself — you never have to touch `svc-pipeline`.
+pipeline yourself — you never have to touch `svc-pipeline`. The CLI can now run
+all three stages too, batch-style — see [B2](#b2-define-a-config) for
+`groups_csv`.
 
 **Input** (either path): a folder of `.sig` files.
 **Output:** a CSV where each row is one scan and each column is one wavelength
@@ -286,9 +288,11 @@ them in Excel, pandas, or R for downstream analysis.
 # Part B — The advanced path: the command line
 
 When you have many folders to process — or want a repeatable, scriptable run with
-no notebook — use the `svc-pipeline` command. It runs **Stages 1 + 2** in one
-shot and writes the merged CSV. (Grouping/averaging — Stage 3 — is then done in
-the notebook or with the [`pipeline/processor.py`](pipeline/processor.py) tools.)
+no notebook — use the `svc-pipeline` command. It runs **Stages 1 + 2** and writes
+the merged CSV; add a `groups_csv` to the config (or pass `--groups-csv`) and it
+runs **Stage 3** too, writing an averaged spectrum per group alongside it. No
+config? Grouping/averaging is also available directly in the notebook or with
+the [`pipeline/processor.py`](pipeline/processor.py) tools.
 
 ## B1. Install as a command-line tool
 
@@ -387,6 +391,19 @@ instruments). The **`processing`** block holds Stage 2's scientific parameters.
 > **Don't commit private paths.** Keep the placeholder in the shared
 > `config/config.json`; save your personal edited version under a different name.
 
+**Optional — group repeat scans into one averaged spectrum per sample (Stage 3).**
+Add two keys pointing at a grouping CSV (same `scan_id`/`scans` + `name` schema
+described in [`naming_ids/README.md`](naming_ids/README.md)):
+
+```json
+"groups_csv": "naming_ids/my_groups.csv",
+"group_agg_method": "mean"
+```
+
+With `groups_csv` set, running `svc-pipeline` also writes a grouped/averaged CSV
+next to the merged one — no notebook needed. Omit both keys and Stage 3 simply
+doesn't run (everything else works exactly as before).
+
 ## B3. Run it
 
 Try it immediately on the bundled example — `--input-dir` points at a folder
@@ -423,7 +440,9 @@ both work.)
 |---|---|
 | `config` | Which config file to use (positional, optional; default `config.json`). |
 | `--input-dir <path>` | Process only this folder, ignoring the config's `sig_input_dir`. |
-| `--step {1,2,all}` | `1` = Stage 1 only; `2` = Stage 2 only (Stage 1 must have run already); `all` = both (default). |
+| `--step {1,2,3,all}` | `1` = Stage 1 only; `2` = Stage 2 only (Stage 1 must have run already); `3` = Stage 3 only (Stage 2 must have run already; requires `groups_csv`); `all` = every stage that's configured (default). |
+| `--groups-csv <path>` | Group repeat scans and average them, using this CSV — overrides the config's `groups_csv` (or sets it if the config doesn't have one). |
+| `--group-method {mean,median,sum,min,max}` | Aggregation method for Stage 3 (default `mean`) — overrides the config's `group_agg_method`. |
 | `--verbose` | Print detailed progress messages — useful if something looks wrong. |
 
 ```bash
@@ -432,6 +451,9 @@ svc-pipeline config.json --verbose
 
 # Re-do only the resampling (Stage 2) without re-truncating every file
 svc-pipeline config.json --step 2 --input-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+
+# Group and average an already-resampled folder, without editing the config
+svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
 ```
 
 > **Heads-up:** each run **deletes** the previously processed `.sig` files in the
@@ -452,6 +474,8 @@ svc-pipeline config.json --step 2 --input-dir data/a4any_sb_2025-cn_ch-svc-aviri
 | `No SIG files found in ...` | The input folder has no `.sig` files. Check the path and that files end in `.sig`. |
 | `Instrument mismatch detected; aborting processing.` | A folder mixes scans from different instruments. Split them into separate folders. |
 | `Summary CSV not found ... (run --step 1 first)` | You ran `--step 2` before Stage 1. Run `--step all` (or `--step 1` then `--step 2`). |
+| `Merged CSV not found ... (run --step 2 first)` | You ran `--step 3` before Stage 2. Run `--step all` (or `--step 1`, `--step 2`, then `--step 3`). |
+| `Groups CSV not found: ...` | The `groups_csv` path (config or `--groups-csv`) doesn't exist. Check the path. |
 | A warning that a `processing.*` value "differs from parity-verified default" | You changed a value in the `processing` block. Restore the defaults unless intentional. |
 
 Add `--verbose` to any terminal run to see exactly what each stage is doing.

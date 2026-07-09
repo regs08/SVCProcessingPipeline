@@ -1,4 +1,4 @@
-"""Execution of the two SIG processing stages.
+"""Execution of the three SIG processing stages.
 
 :class:`Pipeline` runs, for a single resolved
 :class:`~pipeline.run_config.PipelineSettings`:
@@ -7,6 +7,9 @@
   the calibration end-line and write a per-run summary CSV.
 * Stage 2 (:meth:`Pipeline.resample`) — run the pure-Python resampler over the
   processed files.
+* Stage 3 (:meth:`Pipeline.group_and_average`) — optional; only runs when the
+  config supplies a ``groups_csv``. Groups repeat scans of the same sample and
+  averages them into one spectrum per group.
 
 Config loading that produces the ``PipelineSettings`` lives in
 ``pipeline/run_config.py``; the CLI that wires them together lives in
@@ -20,6 +23,7 @@ import logging
 from pathlib import Path
 from typing import Iterable
 
+from .processor import GroupSpec, SigSpectraAverager
 from .resampler import resample_spectra
 from .run_config import PipelineSettings
 from .sig_processor import SigFileProcessor
@@ -38,12 +42,14 @@ class Pipeline:
         """Run the requested step(s) and report the produced artifacts.
 
         ``step``: ``"1"`` = Stage 1 only, ``"2"`` = Stage 2 only (Stage 1 must
-        have run previously), ``"all"`` = both.
+        have run previously), ``"3"`` = Stage 3 only (Stage 2 must have run
+        previously; requires ``groups_csv`` to be configured), ``"all"`` = every
+        stage that's configured to run (Stage 3 only if ``groups_csv`` is set).
         """
-        summary_csv: Path | None
+        summary_csv: Path | None = None
         if step in {"1", "all"}:
             summary_csv = self.process_sig_files()
-        else:
+        elif step == "2":
             summary_csv = self.settings.summary_csv if self.settings.summary_csv.exists() else None
             if summary_csv is None:
                 self.logger.error(
@@ -54,8 +60,17 @@ class Pipeline:
         merged_csv: Path | None = None
         if step in {"2", "all"}:
             merged_csv = self.resample(summary_csv)
+        elif step == "3":
+            merged_path = self.settings.resampled_dir / self.settings.merged_csv_name
+            merged_csv = merged_path if merged_path.exists() else None
+            if merged_csv is None:
+                self.logger.error("Merged CSV not found at %s (run --step 2 first).", merged_path.resolve())
 
-        return {"summary_csv": summary_csv, "merged_csv": merged_csv}
+        grouped_csv: Path | None = None
+        if step in {"3", "all"} and self.settings.groups_csv is not None:
+            grouped_csv = self.group_and_average(merged_csv)
+
+        return {"summary_csv": summary_csv, "merged_csv": merged_csv, "grouped_csv": grouped_csv}
 
     # ── Stage 1: process raw .sig files ──────────────────────────────────────
 
@@ -193,6 +208,44 @@ class Pipeline:
 
         logger.warning("Merged spectra file was not created at %s", merged_path)
         return None
+
+    # ── Stage 3: group & average (optional) ──────────────────────────────────
+
+    def group_and_average(self, merged_csv: Path | None) -> Path | None:
+        """Average repeat scans of the same sample into one spectrum per group.
+
+        Requires ``settings.groups_csv`` (checked by the caller) and a merged
+        CSV from Stage 2. Groups are read via :meth:`GroupSpec.from_csv`
+        (``scans``/``scan_id`` + ``name`` columns) and applied with
+        :class:`SigSpectraAverager`.
+        """
+        settings = self.settings
+        logger = self.logger
+        if merged_csv is None:
+            logger.error("Skipping grouping because no merged CSV is available.")
+            return None
+
+        groups_csv = settings.groups_csv
+        if groups_csv is None or not groups_csv.exists():
+            logger.error("Groups CSV not found: %s", groups_csv.resolve() if groups_csv else groups_csv)
+            return None
+
+        groups = GroupSpec.from_csv(groups_csv)
+        if not groups:
+            logger.warning("No groups found in %s; nothing to average.", groups_csv.resolve())
+            return None
+
+        if settings.verbose:
+            logger.info("Grouping %s using %s (%s)", merged_csv, groups_csv.resolve(), settings.group_agg_method)
+
+        averager = SigSpectraAverager.from_csv(merged_csv)
+        grouped_df = averager.aggregate(groups, method=settings.group_agg_method)
+
+        output_path = settings.resampled_dir / settings.grouped_csv_name
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        grouped_df.to_csv(output_path, index=False)
+        logger.info("Grouped/averaged spectra written to %s", output_path.resolve())
+        return output_path
 
     # ── helpers ──────────────────────────────────────────────────────────────
 

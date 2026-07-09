@@ -93,8 +93,10 @@ Outputs land under `pipeline_outputs/` by default. See [`config/README.md`](conf
    └────────────────────────────────────┘
 ```
 
-The `svc-pipeline` console script glues Stages 1 and 2 together through
-`pipeline.cli`; Stage 3 is invoked from notebooks against the Stage 2 output.
+The `svc-pipeline` console script runs Stages 1 and 2 through `pipeline.cli`,
+and Stage 3 too once a `groups_csv` is configured (or passed via
+`--groups-csv`) — see [`config/README.md`](config/README.md#grouping--stage-3-optional).
+Stage 3 is also available directly from notebooks against the Stage 2 output.
 The pipeline is **single-pass and idempotent per input directory** — previous
 processed `.sig` files in the target directory are deleted at the start of each
 run.
@@ -113,7 +115,9 @@ svc-pipeline [config] [options]
 |---|---|
 | `config` | Run-config JSON (positional, optional; default `config/config.json`). Bare names resolve under `config/`, so `config.json`, `config`, and `config/config.json` are equivalent. See [`config/README.md`](config/README.md) for schema. |
 | `--input-dir <path>` | Override `sig_input_dir` and process only this directory. |
-| `--step {1,2,all}` | `1` = process + summary CSV only; `2` = resample only (requires Stage 1 to have been run); `all` = both (default). |
+| `--step {1,2,3,all}` | `1` = process + summary CSV only; `2` = resample only (requires Stage 1); `3` = group + average only (requires Stage 2 and `groups_csv`); `all` = every stage that's configured (default). |
+| `--groups-csv <path>` | Override the config's `groups_csv` to group repeat scans and average them. |
+| `--group-method {mean,median,sum,min,max}` | Override the config's `group_agg_method` for Stage 3 (default `mean`). |
 | `--verbose` | Print INFO/DEBUG logs before and after each stage. |
 
 ### Expected output layout
@@ -124,10 +128,11 @@ pipeline_outputs/
 │   ├── <truncated *.sig files>
 │   └── <input_dir_name>_processed_sig_summary.csv
 └── sig_resampled/<input_dir_name>/
-    └── <input_dir_name>_merged_spectra.csv     # 2101 columns (400–2500 nm)
+    ├── <input_dir_name>_merged_spectra.csv     # 2101 columns (400–2500 nm)
+    └── <input_dir_name>_grouped_spectra.csv    # only if groups_csv is configured
 ```
 
-`summary_csv_name` and `merged_csv_name` in the run config are suffixes; the real filenames are prefixed with the input directory name. Verify your config in [`config/README.md`](config/README.md).
+`summary_csv_name`, `merged_csv_name`, and `grouped_csv_name` in the run config are suffixes; the real filenames are prefixed with the input directory name. Verify your config in [`config/README.md`](config/README.md).
 
 ---
 

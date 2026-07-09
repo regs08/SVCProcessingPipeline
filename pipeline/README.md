@@ -17,13 +17,14 @@ Encapsulates *what to run*. `RunConfig.load(repo_root, name, logger)` resolves t
 - `.ensure_no_placeholder(input_dir_override)` — abort with guidance if the template's `<PATH_TO_SIG_INPUT_ROOT>` was never edited.
 - `.input_directories()` — expand `sig_input_dir` / `sig_input_dirs` / `process_all_subdirs` into the directories to process.
 - `.processing_params()` — the `processing` block merged over the parity-verified defaults (cached; warns once on any non-parity value).
-- `.settings_for(input_dir, *, verbose)` — build the per-directory `PipelineSettings` (a frozen dataclass of resolved input/output paths + `processing_params` + resolved `correction_types`/`instrument_numbers`). Internally resolves `SigFileProcessor`'s end-line/serial tables for this directory (priority: inline `instrument` block > `sensor_calibration_file` > `config/calibrations/<dir>.json` > built-in defaults) as plain dicts — it does not mutate `SigFileProcessor.DEFAULT_CORRECTION_TYPES`/`DEFAULT_INSTRUMENT_NUMBERS`, so calibration is resolved fresh per directory with no shared global state between runs.
+- `.settings_for(input_dir, *, verbose, groups_csv_override=None, group_method_override=None)` — build the per-directory `PipelineSettings` (a frozen dataclass of resolved input/output paths + `processing_params` + resolved `correction_types`/`instrument_numbers` + resolved `groups_csv`/`group_agg_method`/`grouped_csv_name`). Internally resolves `SigFileProcessor`'s end-line/serial tables for this directory (priority: inline `instrument` block > `sensor_calibration_file` > `config/calibrations/<dir>.json` > built-in defaults) as plain dicts — it does not mutate `SigFileProcessor.DEFAULT_CORRECTION_TYPES`/`DEFAULT_INSTRUMENT_NUMBERS`, so calibration is resolved fresh per directory with no shared global state between runs. `groups_csv` is `None` (Stage 3 skipped) unless the config's `groups_csv` key or a `--groups-csv` override is set.
 
 ### [`runner.py`](runner.py) — `Pipeline`
-Encapsulates *doing the work*. `Pipeline(settings, logger).run(step)` runs Stage 1 and/or Stage 2 and returns `{"summary_csv": …, "merged_csv": …}`:
+Encapsulates *doing the work*. `Pipeline(settings, logger).run(step)` runs the requested stage(s) and returns `{"summary_csv": …, "merged_csv": …, "grouped_csv": …}`:
 
 - `.process_sig_files()` — Stage 1: instrument-consistency check, truncate each `.sig` at the calibration end-line, write the summary CSV.
 - `.resample(summary_csv)` — Stage 2: call `resample_spectra` with the config's `processing_params`.
+- `.group_and_average(merged_csv)` — Stage 3, optional (only runs when `settings.groups_csv` is set): reads groups via `GroupSpec.from_csv()` and averages repeat scans with `SigSpectraAverager`, writing `grouped_csv_name`. `step="3"` re-runs this alone against an already-existing merged CSV; `step="all"` runs it automatically whenever `groups_csv` is configured.
 
 ### [`sig_processor.py`](sig_processor.py) — `SigFileProcessor`
 Truncates and inspects raw `.sig` ASCII files emitted by the SVC HR-1024i instrument.

@@ -41,9 +41,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--step",
-        choices=["1", "2", "all"],
+        choices=["1", "2", "3", "all"],
         default="all",
-        help="Which step to run: 1=process+summary CSV, 2=Python resampling only, all=run both steps.",
+        help=(
+            "Which step to run: 1=process+summary CSV, 2=Python resampling only, "
+            "3=group+average only (requires groups_csv; step 2 must have already run), "
+            "all=every step that's configured (step 3 only if groups_csv is set)."
+        ),
     )
     parser.add_argument(
         "--verbose",
@@ -54,6 +58,18 @@ def _parse_args() -> argparse.Namespace:
         "--init-config",
         action="store_true",
         help="Write a starter config/config.json in the current directory and exit.",
+    )
+    parser.add_argument(
+        "--groups-csv",
+        help=(
+            "Override the config's groups_csv: group repeat scans of the same sample "
+            "and average them (a CSV with scans/scan_id + name columns)."
+        ),
+    )
+    parser.add_argument(
+        "--group-method",
+        choices=["mean", "median", "sum", "min", "max"],
+        help="Override the config's group_agg_method for step 3 (default: mean).",
     )
     return parser.parse_args()
 
@@ -85,9 +101,16 @@ def main() -> None:
     # warning for any non-default value before the per-directory work begins.
     run_config.processing_params()
 
+    groups_csv_override = Path(args.groups_csv).expanduser() if args.groups_csv else None
+
     overall_results: list[tuple[Path, dict[str, Path | None]]] = []
     for input_dir in input_dirs:
-        settings = run_config.settings_for(input_dir, verbose=args.verbose)
+        settings = run_config.settings_for(
+            input_dir,
+            verbose=args.verbose,
+            groups_csv_override=groups_csv_override,
+            group_method_override=args.group_method,
+        )
         results = Pipeline(settings, logger).run(args.step)
         overall_results.append((input_dir, results))
 

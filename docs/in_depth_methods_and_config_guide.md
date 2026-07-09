@@ -22,17 +22,23 @@ against the source.
 ## How the run is wired
 
 You invoke the pipeline as `svc-pipeline [config]` (default `config/config.json`).
-A run has **two CLI steps** ([cli.py](../pipeline/cli.py#L44-L52),
-[runner.py](../pipeline/runner.py#L37-L58)):
+A run has **three CLI steps** ([cli.py](../pipeline/cli.py#L44-L52),
+[runner.py](../pipeline/runner.py#L37-L58)), the third optional:
 
 | `--step` | Name | What it produces | Output dir |
 |----------|------|------------------|------------|
 | `1` | Process | Truncated copies of each `.sig` + a summary CSV | `processed_dir` |
 | `2` | Resample | One merged, analysis-ready spectra CSV | `resampled_dir` |
-| `all` | Both | Step 1 then Step 2 (the default) | both |
+| `3` | Group & average | One averaged spectrum per group (repeat scans of the same sample) | `resampled_dir` |
+| `all` | Everything configured | Step 1, then Step 2, then Step 3 *if* `groups_csv` is set (the default) | all of the above |
 
 Step 1 is a light **pre-processing/truncation** pass. Step 2 is the real
 scientific work: the five-stage resampling algorithm reproduced from R/`spectrolab`.
+Step 3 is opt-in — it only runs when the config's `groups_csv` (or the
+`--groups-csv` flag) points at a grouping CSV; see
+[config/README.md](../config/README.md#grouping--stage-3-optional). Standalone
+`--step 3` re-runs just the grouping against an already-produced merged CSV,
+without re-running Steps 1–2.
 
 ### Stages at a glance
 

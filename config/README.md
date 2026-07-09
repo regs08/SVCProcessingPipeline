@@ -38,6 +38,9 @@ Two distinct file types live here, both consumed by the installed
 | `merged_csv_name` | string | Suffix for the resampler output CSV. Filename is `<input_dir_name>_<merged_csv_name>`. |
 | `end_line_overrides` | object | **Optional.** `{sensor_type: end_line_value}` pairs that override the sensor calibration file / built-in defaults. Keys are lower-cased. |
 | `sensor_calibration_file` | string | **Optional.** Path (absolute or repo-relative) to a sensor calibration JSON. Takes precedence over the auto-inferred file. |
+| `groups_csv` | string | **Optional.** Path (absolute or repo-relative) to a grouping CSV (`scans`/`scan_id` + `name` columns — see [`naming_ids/README.md`](../naming_ids/README.md)). When set, Stage 3 groups repeat scans of the same sample and averages them; overridable per-run with `--groups-csv`. |
+| `group_agg_method` | string | **Optional**, default `"mean"`. One of `mean`/`median`/`sum`/`min`/`max`; overridable per-run with `--group-method`. |
+| `grouped_csv_name` | string | **Optional**, default `"grouped_spectra.csv"`. Suffix for Stage 3's output CSV. Filename is `<input_dir_name>_<grouped_csv_name>`. Only produced when `groups_csv` is set. |
 
 ### `instrument` block (optional)
 
@@ -79,6 +82,22 @@ Algorithm parameters for Stage 2 (`resample_spectra`). All keys are optional; om
 | `resample_fwhm_nm` | `10.0` | FWHM (nm) of the final Gaussian resample kernel (spectrolab `resample(fwhm=10)`). |
 | `splice_interp_wvl` | `[5.0, 2.0]` | Half-window (nm) around each splice boundary used by `match_sensors` (spectrolab `interpolate_wvl`). |
 | `fixed_sensor` | `2` | 1-based index of the sensor held fixed during `match_sensors` (spectrolab `fixed_sensor`). |
+
+### Grouping / Stage 3 (optional)
+
+```json
+"groups_csv": "naming_ids/my_groups.csv",
+"group_agg_method": "mean"
+```
+
+When `groups_csv` is set, `svc-pipeline --step all` (or a standalone
+`--step 3`, once Stage 2 has already produced a merged CSV) reads that CSV
+with `GroupSpec.from_csv()` and averages the named groups of repeat scans
+with `SigSpectraAverager`, writing `<input_dir_name>_<grouped_csv_name>`
+alongside the merged CSV. Both keys can be overridden per-run without
+editing the config: `svc-pipeline --groups-csv path/to/groups.csv
+--group-method median`. If `groups_csv` is absent, Stage 3 never runs — it's
+fully opt-in and every existing config keeps working unchanged.
 
 ### Sensor calibration loading order
 1. `instrument` block in the run config, if present — **highest priority**.
