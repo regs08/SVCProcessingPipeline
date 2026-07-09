@@ -37,9 +37,9 @@ Generated outputs (gitignored): `pipeline_outputs/sig_processed/<run>/`, `pipeli
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install svc-processing
+python -m pip install svc-processing   # package name
 
-svc-pipeline --init-config   # writes a starter config/config.json here
+svc-pipeline --init-config   # command name — different from the package name above
 # Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
 svc-pipeline
 ```

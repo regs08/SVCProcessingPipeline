@@ -292,18 +292,33 @@ the notebook or with the [`pipeline/processor.py`](pipeline/processor.py) tools.
 
 ## B1. Install as a command-line tool
 
-The console script comes from the same package. For development work, install the
+**If you're working from a clone of this repo** (development work), install the
 full extras (adds the test/lint tools on top of the demo ones):
 
 ```bash
 python -m pip install -e ".[dev,demo]"
 ```
 
-Check it's available:
+**If you just want the tool, with no repo clone**, install it from PyPI:
+
+```bash
+python -m pip install svc-processing
+```
+
+> **The PyPI package name and the terminal command are different words** — this
+> trips people up. You `pip install svc-processing`, but the command you actually
+> type is **`svc-pipeline`** (that's what `[project.scripts]` in `pyproject.toml`
+> maps it to). There is no `svc-processing` command.
+
+Either way, check it's available:
 
 ```bash
 svc-pipeline --help
 ```
+
+If you installed from PyPI with no repo clone, there's no `config/` folder to
+copy a starter config from — see [B2](#b2-define-a-config) for
+`svc-pipeline --init-config`, which generates one.
 
 To build a distributable wheel or publish the package, see
 [`docs/pip_packaging_guide.md`](docs/pip_packaging_guide.md).
@@ -432,6 +447,7 @@ svc-pipeline config.json --step 2 --input-dir data/a4any_sb_2025-cn_ch-svc-aviri
 | Notebook: `ModuleNotFoundError: pipeline` / `matplotlib` | Your environment isn't installed/active. Re-run the **A1** setup, and select the `.venv` kernel in Jupyter. |
 | `jupyter: command not found` | Install the app: `python -m pip install jupyterlab`. |
 | `svc-pipeline: command not found` | Your environment isn't active. Run `source .venv/bin/activate`. |
+| `svc-processing: command not found` | That's the PyPI package name, not the command. The command is `svc-pipeline`. |
 | `... still contains the placeholder "<PATH_TO_SIG_INPUT_ROOT>"` | You didn't set `sig_input_dir`. Edit the config, or pass `--input-dir <path>`. |
 | `No SIG files found in ...` | The input folder has no `.sig` files. Check the path and that files end in `.sig`. |
 | `Instrument mismatch detected; aborting processing.` | A folder mixes scans from different instruments. Split them into separate folders. |
