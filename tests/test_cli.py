@@ -14,6 +14,18 @@ def _write_config(path: Path, data: dict) -> Path:
     return path
 
 
+def test_help_links_to_github_repo(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["svc-pipeline", "--help"])
+
+    with pytest.raises(SystemExit):
+        _parse_args()
+
+    assert "github.com/regs08/SVCProcessingPipeline" in capsys.readouterr().out
+
+
 def test_parse_args_step_and_input_dir_default_to_all_and_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["svc-pipeline", "config.json"])
 

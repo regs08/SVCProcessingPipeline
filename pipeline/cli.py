@@ -28,7 +28,13 @@ def _configure_logging(verbose: bool) -> logging.Logger:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the SIG processing pipeline")
+    parser = argparse.ArgumentParser(
+        description="Run the SIG processing pipeline",
+        epilog=(
+            "Full README, TUTORIAL, and config reference: "
+            "https://github.com/regs08/SVCProcessingPipeline"
+        ),
+    )
     parser.add_argument(
         "config",
         nargs="?",
