@@ -44,14 +44,28 @@ svc-pipeline --init-config   # command name — different from the package name 
 svc-pipeline
 ```
 
-**Working from a clone of this repo** (config/config.json already exists):
+**Working from a clone of this repo** (config/config.json already exists) — run the
+setup script once, then activate the environment it created:
+
+```bash
+./setup.sh            # creates .venv, installs everything, stages the demo data
+# ./setup.sh --dev    # add the test & lint tools for development
+
+source .venv/bin/activate          # macOS / Linux
+# .venv\Scripts\activate           # Windows PowerShell
+
+# Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
+svc-pipeline config.json
+```
+
+The script always installs into *this* repo's `.venv` no matter which folder you run
+it from, so it avoids the "Directory '.' is not installable" and "No module named …"
+errors that come from being in the wrong directory. Prefer to do it by hand?
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev,demo]"
-
-# Edit config/config.json — replace "<PATH_TO_SIG_INPUT_ROOT>" with your data path.
 svc-pipeline config.json
 ```
 
