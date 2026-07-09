@@ -39,7 +39,7 @@ Everything below is in place and was verified on Python 3.11 in a clean venv.
 
 ### ✅ Done — verification
 
-- `python -m build` → clean `svc_processing_pipeline-0.1.0` sdist + `py3-none-any` wheel.
+- `python -m build` → clean `svc_processing-0.1.0` sdist + `py3-none-any` wheel.
 - `pip wheel . --no-deps --no-build-isolation` → **PASSED**; generated wheel
   metadata reports `License-Expression: GPL-3.0-only` and bundles
   `dist-info/licenses/LICENSE`.
@@ -64,10 +64,10 @@ Everything below is in place and was verified on Python 3.11 in a clean venv.
 1. **PyPI account with 2FA enabled** (required to upload) — do this yourself if
    not already done.
 2. **Add the Trusted Publisher** on [pypi.org](https://pypi.org) (Publishing →
-   pending publisher, since the project doesn't exist there yet): Owner
-   `regs08` · Repository `SVCProcessingPipeline` · Workflow file `publish.yml` ·
-   Environment `pypi`.
-3. **Confirm the name `svc-processing-pipeline` is free** on pypi.org (checked
+   pending publisher, since the project doesn't exist there yet): Project name
+   `svc-processing` · Owner `regs08` · Repository `SVCProcessingPipeline` ·
+   Workflow file `publish.yml` · Environment `pypi`.
+3. **Confirm the name `svc-processing`** is free on pypi.org (checked
    2026-07-09: free).
 4. **TestPyPI dry run** (recommended) — rehearse the upload→install round trip.
 5. **Tag and release:** `git tag v0.1.0 && git push public --tags`.
@@ -86,8 +86,8 @@ dispatch, builds the sdist/wheel, and uploads with
 on pypi.org, **Publishing → pending publisher** (the project doesn't exist on
 PyPI yet) → add a **Trusted Publisher**:
 
-- Owner: `regs08` · Repository: `SVCProcessingPipeline` · Workflow file:
-  `publish.yml` · Environment: `pypi`.
+- Project name: `svc-processing` · Owner: `regs08` · Repository:
+  `SVCProcessingPipeline` · Workflow file: `publish.yml` · Environment: `pypi`.
 
 ---
 
@@ -106,11 +106,11 @@ real index:
 
 ```bash
 python -m twine upload --repository testpypi dist/*
-pip install -i https://test.pypi.org/simple/ svc-processing-pipeline
+pip install -i https://test.pypi.org/simple/ svc-processing
 ```
 
 Note: `twine upload` *publishes*; it is not the same as `pip install`. It is the
-step that makes `pip install svc-processing-pipeline` work for everyone else.
+step that makes `pip install svc-processing` work for everyone else.
 
 ---
 
@@ -143,10 +143,10 @@ python -m twine check dist/*                # validate package metadata
 
 # Faithful "as if installed from PyPI" test, in a throwaway venv:
 python3.11 -m venv /tmp/pkgtest
-/tmp/pkgtest/bin/pip install dist/svc_processing_pipeline-0.1.0-py3-none-any.whl
+/tmp/pkgtest/bin/pip install dist/svc_processing-0.1.0-py3-none-any.whl
 /tmp/pkgtest/bin/svc-pipeline --help
 ```
 
 Installing the locally built wheel is mechanically identical to
-`pip install svc-processing-pipeline` once published — same artifact, only the
+`pip install svc-processing` once published — same artifact, only the
 source differs (local file vs the PyPI index).

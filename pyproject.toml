@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "svc-processing-pipeline"
+name = "svc-processing"
 version = "0.1.0"
 description = "Pure-Python SVC HR-1024i hyperspectral .sig processing pipeline"
 readme = "README.md"
