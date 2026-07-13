@@ -26,7 +26,7 @@ jobs:
       - name: Install package and dev tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ".[dev,demo]"
+          python -m pip install build ".[dev,demo]"
 
       - name: Compile tracked Python files
         run: |
@@ -39,15 +39,53 @@ jobs:
       - name: Pytest
         run: python -m pytest -q
 
-      - name: Notebook smoke test when demo data are present
+      - name: Build wheel
+        run: python -m build --wheel --outdir "${RUNNER_TEMP}/dist"
+
+      - name: Smoke-test installed wheel and pip-first notebook
         env:
           MPLBACKEND: Agg
         run: |
-          if find notebooks/pipeline_demo/demo_data/spectra -maxdepth 1 -name '*.sig' | grep -q .; then
-            python -m nbconvert --to notebook --execute \
+          NOTEBOOK_VENV="${RUNNER_TEMP}/notebook-venv"
+          SMOKE_DIR="${RUNNER_TEMP}/notebook-smoke"
+          WHEEL="$(find "${RUNNER_TEMP}/dist" -maxdepth 1 -name '*.whl' -print -quit)"
+
+          python - "${WHEEL}" <<'PY'
+          from sys import argv
+          from zipfile import ZipFile
+
+          with ZipFile(argv[1]) as archive:
+              names = archive.namelist()
+          forbidden = [
+              name for name in names
+              if name.startswith(("notebooks/", "tests/", "pipeline_outputs/"))
+              or name.endswith((".sig", ".csv"))
+              or "demo_data" in name
+          ]
+          assert "pipeline/notebook.py" in names
+          assert not forbidden, forbidden
+          PY
+
+          python -m venv "${NOTEBOOK_VENV}"
+          "${NOTEBOOK_VENV}/bin/python" -m pip install "${WHEEL}[demo]"
+          "${NOTEBOOK_VENV}/bin/python" -c \
+            'import IPython, ipykernel, matplotlib, nbclient, nbconvert, nbformat; import pipeline.notebook'
+          "${NOTEBOOK_VENV}/bin/python" -m ipykernel install \
+            --prefix "${NOTEBOOK_VENV}" --name svc-smoke
+
+          mkdir -p "${SMOKE_DIR}"
+          python -c \
+            'import sys; from tests.notebook_data import create_notebook_test_data; create_notebook_test_data(sys.argv[1])' \
+            "${SMOKE_DIR}/sig-data"
+          cp notebooks/pipeline_demo.ipynb "${SMOKE_DIR}/pipeline_demo.ipynb"
+          cd "${SMOKE_DIR}"
+          SVC_DATA_FOLDER="${SMOKE_DIR}/sig-data" \
+            JUPYTER_PATH="${NOTEBOOK_VENV}/share/jupyter" \
+            "${NOTEBOOK_VENV}/bin/python" -m nbconvert --to notebook --execute \
+              --ExecutePreprocessor.kernel_name=svc-smoke \
               --ExecutePreprocessor.timeout=600 \
-              notebooks/pipeline_demo.ipynb \
-              --output /tmp/demo_run.ipynb
-          else
-            echo "Skipping notebook execution: external demo .sig files are not present."
-          fi
+              pipeline_demo.ipynb --output demo_run.ipynb
+
+          test -f pipeline_outputs/notebook_run/spectra.csv
+          test -f pipeline_outputs/notebook_run/spectra_paired.csv
+          test -f pipeline_outputs/notebook_run/spectra_grouped.csv

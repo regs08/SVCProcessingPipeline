@@ -28,12 +28,14 @@ svcProcessingPipeline/
 │   ├── runner.py                   # Pipeline — run the processing + resampling stages
 │   ├── sig_processor.py            # SigFileProcessor — truncate & inspect .sig files
 │   ├── resampler.py                # resample_spectra() — pure-Python R replacement
-│   └── processor.py                # SVCDataProcessor / SigSpectraAverager / GroupSpec
+│   ├── processor.py                # SVCDataProcessor / SigSpectraAverager / GroupSpec
+│   └── notebook.py                 # Installed Spectrum/SpectraCollection notebook API
 │
 ├── tests/                          # Pytest suite — see tests/README.md
 │   ├── README.md
 │   ├── __init__.py
 │   ├── conftest.py                 # --r-reference-csv / --r-input-dir options + fixtures
+│   ├── notebook_data.py            # Full-range test-only data generator for notebook CI
 │   ├── fixtures/sig_inputs/        # Compact synthetic .sig fixtures, not field data
 │   ├── test_resampler_parity.py    # R-vs-Python numerical parity test (1e-3 tolerance)
 │   └── test_*.py                   # Focused unit tests for config, runner, helpers, grouping
@@ -57,13 +59,13 @@ svcProcessingPipeline/
 │
 ├── notebooks/                      # Demo/analysis notebooks (not on the production path)
 │   ├── README.md
-│   ├── pipeline_demo.ipynb                     # tracked — end-to-end pipeline demo
-│   ├── pipeline_demo/                          # helper package for the demo notebook
+│   ├── pipeline_demo.ipynb                     # pip-first end-to-end tutorial
+│   ├── pipeline_demo/                          # notebook docs + compatibility imports
 │   │   ├── __init__.py
 │   │   ├── README.md
 │   │   ├── demo_data_manifest.json             # external raw-data manifest
 │   │   ├── demo_data/                          # tracked README, ignored raw .sig target
-│   │   └── svc.py
+│   │   └── svc.py                              # re-exports pipeline.notebook
 │   ├── weekly_sig_spectra_visualization.ipynb # gitignored
 │   └── spectral_change_analysis.ipynb         # gitignored
 │
