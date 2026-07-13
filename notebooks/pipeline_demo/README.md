@@ -1,47 +1,66 @@
 # Pipeline Demo Notebook
 
-This directory contains the helper package for `notebooks/pipeline_demo.ipynb`.
-The notebook uses an external 15-file SVC HR-1024i demo dataset. Raw `.sig`
-files are intentionally not tracked because their headers contain GPS/location
-metadata.
+[`../pipeline_demo.ipynb`](../pipeline_demo.ipynb) is a pip-first walkthrough
+of Stage 1 truncation, Stage 2 resampling, reference/outlier filtering, plotting,
+CSV export, and repeat-scan averaging.
 
-## Prepare Demo Data
+## Run without cloning the repository
 
-From the repository root, copy and verify the selected local files:
+Download the notebook, open it in a Python 3.11 Jupyter environment, and run it
+top to bottom. Its first executable cell checks for the notebook helpers and
+installs `svc-processing[demo]>=0.1.5` into the current kernel when needed. While
+that release is not yet on PyPI, the same cell falls back to the public GitHub
+source archive. No repository clone or manual Python-path setup is required.
+
+The tutorial assumes you already have a folder of authorized raw `.sig` scans.
+Set `DATA_FOLDER` to that containing folder before continuing. The public repo
+does not include field scans because SVC headers can contain timestamps and GPS
+coordinates.
+
+The reusable notebook API (`Spectrum`, `SpectraCollection`, `build_config`, and
+plot/group helpers) is installed as `pipeline.notebook`. This directory's
+[`svc.py`](svc.py) is only a compatibility re-export for older cloned notebooks.
+
+## Use your own data
+
+In the settings cells:
+
+- point `DATA_FOLDER` at the folder containing your raw `.sig` files;
+- leave `INSTRUMENT = "auto"` or select `"bronze"` / `"silver"` explicitly;
+- set `END_LINE` to the exact maximum wavelength from the first data column when
+  the calibrated default does not match your instrument; and
+- choose an `OUTPUT_FOLDER` where the processed files and CSVs should be saved.
+
+You can download the notebook alone, or get all project documentation and config
+examples with:
 
 ```bash
-python3 scripts/prepare_demo_data.py \
-  --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+git clone https://github.com/regs08/SVCProcessingPipeline.git
+cd SVCProcessingPipeline
 ```
 
-The script copies the manifest-listed files into
-`notebooks/pipeline_demo/demo_data/spectra/` and verifies byte sizes and SHA256
-checksums against `notebooks/pipeline_demo/demo_data_manifest.json`.
+Cloning does not download raw field scans. If you copy authorized scans beneath
+the ignored `data/` directory, locate them with `find data -name '*.sig'`; use
+the containing directory as `DATA_FOLDER`.
 
-Once the external artifact is published, record its URL or DOI in the manifest.
-Then a fresh clone can prepare the same data with:
+## Headless development check
 
-```bash
-python3 scripts/prepare_demo_data.py --download-url <artifact-url>
-```
-
-## Run The Notebook
+CI builds a wheel, installs it into a clean virtual environment, copies the
+notebook outside the repository, and executes it there. From a configured local
+development environment, the shorter equivalent is:
 
 ```bash
-MPLBACKEND=Agg jupyter nbconvert --to notebook --execute \
+SVC_DATA_FOLDER=/path/to/your/sig/folder \
+  MPLBACKEND=Agg jupyter nbconvert --to notebook --execute \
   --ExecutePreprocessor.timeout=600 \
   notebooks/pipeline_demo.ipynb \
   --output /tmp/demo_run.ipynb
 ```
 
-The notebook is **config-driven**. The opening cells let you set a data folder,
-output folder, and instrument, then `build_config(...)` bundles them and
-auto-detects the instrument from the `.sig` headers. To run it on your own scans,
-edit the settings cell and point `DATA_FOLDER` at your folder.
+## External field data
 
-For the bundled demo, an optional cell verifies the external `.sig` files against
-`demo_data_manifest.json` and raises a clear setup error if any are missing or a
-checksum differs. `config.prepare()` then truncates the raw files (Stage 1) into
-`pipeline_outputs/notebook_run/processed_sig/`, mirroring the production
-Stage 1 -> Stage 2 boundary while keeping generated `.sig` copies under ignored
-output paths.
+[`demo_data_manifest.json`](demo_data_manifest.json) and
+[`../../scripts/prepare_demo_data.py`](../../scripts/prepare_demo_data.py) remain
+available for explicitly authorized parity work with the external field dataset.
+Those raw scans are ignored by Git and are not downloaded or packaged by the
+pip-first notebook.

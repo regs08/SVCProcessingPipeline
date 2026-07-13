@@ -7,7 +7,7 @@ assumed.
 There are **two ways to use this pipeline**, and this tutorial is built around
 the first:
 
-- **🌱 The notebook (gentle — start here).** The demo notebook
+- **🌱 The notebook (gentle — start here).** The tutorial notebook
   [`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) walks through
   the *entire* pipeline interactively and draws a plot at every step. You load
   your scans, clean them, and average them — all in one place, seeing exactly
@@ -82,70 +82,104 @@ all three stages too, batch-style — see [B2](#b2-define-a-config) for
 **Output:** a CSV where each row is one scan and each column is one wavelength
 (400, 401, … 2500 nm — 2101 columns).
 
+### How to determine the Stage 1 end line
+
+Determine the end line **after calibrating an instrument, and again whenever a
+new SVC instrument is introduced**. The value is instrument-specific: it is the
+**maximum wavelength in the data section of a raw `.sig` file**.
+
+To find it manually:
+
+1. Open a raw `.sig` file in a text editor and find the line `data=`. Everything
+   below it is the scan data.
+2. Read the **first column** below `data=`. This is the wavelength column; the
+   other columns contain radiance and reflectance values.
+3. Find the largest number in that first column. Keep the value exactly as it
+   appears in the file, including its decimal place. That maximum is the
+   `end_line` for the instrument.
+4. Check several `.sig` files from the same instrument and calibration. They
+   should have the same maximum wavelength. If they do not, stop and investigate
+   the calibration or files instead of choosing one arbitrarily.
+
+You can also calculate it with Python from the project folder. Replace the path
+with one of your raw files:
+
+```python
+from pathlib import Path
+
+sig_file = Path("path/to/one_scan.sig")
+lines = sig_file.read_text(errors="replace").splitlines()
+data_start = next(i for i, line in enumerate(lines) if line.strip() == "data=") + 1
+
+wavelengths = []
+for line in lines[data_start:]:
+    columns = line.split()
+    if columns:
+        try:
+            wavelengths.append((float(columns[0]), columns[0]))
+        except ValueError:
+            pass
+
+_, end_line = max(wavelengths)
+print(f"end_line = {end_line}")
+```
+
+For example, if the maximum first-column value is `2520.4`, configure the end
+line as the string `"2520.4"`. Stage 1 keeps the data through that wavelength
+and removes anything after it. This is a calibration/setup task—not a value you
+need to rediscover for every routine processing run with the same calibrated
+instrument.
+
 ---
 
-# Part A — The gentle path: the demo notebook
+# Part A — The gentle path: the tutorial notebook
 
 This is the main event. By the end you'll have loaded scans, watched the cleanup
 happen step by step, and saved averaged spectra — all without leaving Jupyter.
 
-## A1. One-time setup
+## A1. Get and open the notebook
 
-You need **Python 3.11**. Open a terminal in the project's top folder (the one
-with `pyproject.toml`) and run the setup script once:
+You need a Python 3.11 notebook environment and a folder containing your raw
+`.sig` scans. You can download
+[`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) by itself, or
+clone the repository to keep the notebook, tutorial, configs, and tests together:
 
 ```bash
-./setup.sh
+git clone https://github.com/regs08/SVCProcessingPipeline.git
+cd SVCProcessingPipeline
 ```
 
-That's it. The script creates the isolated environment, installs the pipeline
-plus its science libraries and Jupyter, and copies the example dataset into
-place. It always installs into *this* repo's `.venv` no matter which folder you
-launched it from, so the "not installable" and "No module named matplotlib"
-errors can't happen.
-
-<details>
-<summary>What the script runs (if you'd rather do it by hand)</summary>
+The public repository intentionally excludes field `.sig` files because their
+headers can contain GPS and time metadata. Copy your authorized scans into a
+folder you control. If you place them beneath the clone's ignored `data/`
+directory, this terminal command helps locate them:
 
 ```bash
-# 1. Create an isolated environment so this project's packages
-#    don't interfere with anything else on your machine.
-python3.11 -m venv .venv
-
-# 2. Activate it — your shell now uses this environment.
-source .venv/bin/activate          # macOS / Linux
-# .venv\Scripts\activate           # Windows PowerShell
-
-# 3. Install the pipeline, its science libraries, and Jupyter.
-python -m pip install -e ".[demo]"
-python -m pip install jupyterlab
-
-# 4. Copy the bundled 15-scan example dataset into place.
-python3 scripts/prepare_demo_data.py \
-  --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+find data -type f -name '*.sig' | head
 ```
 
-</details>
+Open the notebook and run its first code cell. It checks whether the notebook
+helpers are already available; if not, it installs `svc-processing[demo]>=0.1.5`
+into the current kernel. While that release is not yet available from PyPI, the
+same setup cell falls back to installing from the public GitHub source archive.
+No editable install, repository clone, or Python-path modification is needed.
 
-That's all the terminal work for the gentle path — from here you live in the
-notebook.
+> **Working from a repository clone?** `./setup.sh` is still available for
+> contributors. It creates `.venv`, installs the project in editable mode,
+> and installs JupyterLab. You still point `DATA_FOLDER` at your own scans.
 
-> **Tip — next time.** Each new terminal session, re-run
-> `source .venv/bin/activate` first. You'll know it's active when your prompt
-> shows `(.venv)`.
+## A2. Launch Jupyter locally (if needed)
 
-## A2. Open the notebook
-
-Launch Jupyter from the project's top folder:
+If you do not already have an application that opens notebooks, install and
+launch JupyterLab from the folder containing your downloaded notebook:
 
 ```bash
+python3.11 -m pip install jupyterlab
 jupyter lab
 ```
 
-A browser tab opens. Navigate to `notebooks/pipeline_demo.ipynb` and click it.
-
-> Prefer VS Code? Its Python + Jupyter extensions open `.ipynb` files directly —
-> just pick the `.venv` environment as the kernel.
+A browser tab opens; click `pipeline_demo.ipynb`. VS Code users can instead open
+the file directly with the Python and Jupyter extensions.
 
 ## A3. How to run cells
 
@@ -154,18 +188,19 @@ press **Shift + Enter** to run it and move to the next. Run them **top to
 bottom** — each builds on the one before. Output and plots appear right under the
 cell that produced them.
 
-Run the first few cells (imports and paths). The **paths** cell is where
-**Stage 1** happens: it truncates the raw demo files into a working folder.
-You'll see it print where the raw and processed spectra live. Then follow the
-three parts below — they mirror the notebook exactly.
+Run the install, imports, and settings cells first. Set `DATA_FOLDER` to the
+folder containing the scans—not to an individual `.sig` file. The preflight cell
+prints the count and first filename. `config.prepare()` then performs **Stage 1**
+by truncating those raw files into a working folder. The remaining parts mirror
+the notebook.
 
 ## A4. Part 1 — a single spectrum, step by step
 
 Loading one scan makes each stage easy to see.
 
 ```python
-# Load one scan into a Spectrum object and print a summary
-single_spectrum = Spectrum(next(SPECTRA_FOLDER.glob("*.sig")))
+# Load one Stage 1 output into a Spectrum object and print a summary
+single_spectrum = Spectrum.from_config(config)
 print(single_spectrum)
 ```
 
@@ -199,7 +234,7 @@ single_spectrum.plot_processing_steps() # show the before/after
 Now the same process runs on every scan at once, with two clean-up filters.
 
 ```python
-collection = SpectraCollection(SPECTRA_FOLDER)
+collection = SpectraCollection.from_config(config)
 print(collection)
 collection.plot_raw()                    # all raw spectra overlaid
 ```
@@ -267,8 +302,8 @@ can be any size, not just pairs.
 | `collection.plot()` | Every cleaned scan overlaid on one chart. |
 | `plot_paired_averages(collection, pairs, groups=groups)` | Individual scans faded under their bold group mean, one colour per group. |
 
-> These friendly `Spectrum` / `SpectraCollection` helpers live in
-> [`notebooks/pipeline_demo/svc.py`](notebooks/pipeline_demo/svc.py). Under the
+> These friendly `Spectrum` / `SpectraCollection` helpers are installed from
+> [`pipeline/notebook.py`](pipeline/notebook.py). Under the
 > hood they call the same functions the command-line pipeline uses
 > (`process_sig_file`, `resample_spectra` in
 > [`pipeline/resampler.py`](pipeline/resampler.py)) — so the numbers you see in
@@ -276,22 +311,25 @@ can be any size, not just pairs.
 
 ## A8. Using your own data in the notebook
 
-The notebook is wired to the demo dataset, but pointing it at your own scans is a
-two-line change in the setup cells:
+The tutorial assumes you have raw scans. Configure them in the settings cells:
 
-- Set `RAW_SPECTRA_FOLDER` to your folder of `.sig` files (instead of the
-  verified demo folder).
-- In the **paths** cell, change `correction_type="bronze"` to your instrument
-  (`"bronze"` or `"silver"`) so Stage 1 trims at the right wavelength.
+- Set `DATA_FOLDER` to your folder of raw `.sig` files.
+- Leave `INSTRUMENT = "auto"` to detect the instrument from the file headers, or
+  set it explicitly to `"bronze"` or `"silver"`.
+- Set `END_LINE` to the exact string found with the
+  [maximum-wavelength procedure](#how-to-determine-the-stage-1-end-line), such
+  as `END_LINE = "2520.4"`. You may leave it as `None` only when the calibrated
+  default already matches your instrument.
 
 Everything downstream (load, filter, process, average, plot) works the same.
 
 ## A9. Where your results were saved
 
-The notebook writes its CSVs under `pipeline_outputs/csv_exports/`:
+The notebook writes its CSVs under `pipeline_outputs/notebook_run/`:
 
 - `spectra.csv` — every cleaned scan (Part 2).
 - `spectra_paired.csv` — one averaged row per sample group (Part 3).
+- `spectra_grouped.csv` — groups selected by scan number (Part 4).
 
 Each file has one row per scan/group and wavelength columns 400 – 2500 nm. Open
 them in Excel, pandas, or R for downstream analysis.
@@ -401,7 +439,10 @@ doing the wrong thing.)
 
 The **`instrument`** block maps each instrument to its truncation wavelength
 (`end_line`) and `serial` number (used to confirm a folder isn't mixing
-instruments). The **`processing`** block holds Stage 2's scientific parameters.
+instruments). Set `end_line` using the
+[maximum-wavelength procedure above](#how-to-determine-the-stage-1-end-line),
+especially after calibration or when adding a new SVC instrument. The
+**`processing`** block holds Stage 2's scientific parameters.
 
 > ⚠️ **Leave the `processing` values at their defaults** unless you know exactly
 > why you're changing them — they're numerically verified against the original R
@@ -445,11 +486,11 @@ scans,name
 
 ## B3. Run it
 
-Try it immediately on the bundled example — `--input-dir` points at a folder
-directly and skips the placeholder check, so no config editing is needed:
+To process the same folder from the command line, use `--input-dir` to skip
+config editing:
 
 ```bash
-svc-pipeline --input-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+svc-pipeline --input-dir /path/to/your/sig/folder
 ```
 
 It prints the input directory and the files it produced. Look under
@@ -457,11 +498,11 @@ It prints the input directory and the files it produced. Look under
 
 ```
 pipeline_outputs/
-├── sig_processed/a4any_sb_2025-cn_ch-svc-aviris_bottom/
-│   ├── <15 truncated *.sig files>
-│   └── a4any_sb_2025-cn_ch-svc-aviris_bottom_processed_sig_summary.csv
-└── sig_resampled/a4any_sb_2025-cn_ch-svc-aviris_bottom/
-    └── a4any_sb_2025-cn_ch-svc-aviris_bottom_merged_spectra.csv   ← your result
+├── sig_processed/<folder_name>/
+│   ├── <truncated *.sig files>
+│   └── <folder_name>_processed_sig_summary.csv
+└── sig_resampled/<folder_name>/
+    └── <folder_name>_merged_spectra.csv   ← your result
 ```
 
 Once you've edited the config to point at your own data, just run:
@@ -489,7 +530,7 @@ both work.)
 svc-pipeline config.json --verbose
 
 # Re-do only the resampling (Stage 2) without re-truncating every file
-svc-pipeline config.json --step 2 --input-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+svc-pipeline config.json --step 2 --input-dir /path/to/your/sig/folder
 
 # Group and average an already-resampled folder, without editing the config
 svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
@@ -504,8 +545,8 @@ svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
 
 | Message / symptom | What it means & the fix |
 |---|---|
-| Demo data "missing" or "failed manifest verification" | Run `python3 scripts/prepare_demo_data.py --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom`. |
-| Notebook: `ModuleNotFoundError: pipeline` / `matplotlib` | Your environment isn't installed/active. Re-run `./setup.sh` (the **A1** setup), and select the `.venv` kernel in Jupyter. |
+| Notebook says no `.sig` files were found | Set `DATA_FOLDER` to the containing folder, confirm the files end in `.sig`, and re-run from the settings cell. |
+| Notebook: `ModuleNotFoundError: pipeline.notebook` / `matplotlib` | Re-run the first setup/install cell in the current kernel. If PyPI reports that `svc-processing>=0.1.5` is unavailable, publish the release or make sure the public GitHub source archive contains these notebook-helper changes. |
 | `jupyter: command not found` | Install the app: `python -m pip install jupyterlab`. |
 | `svc-pipeline: command not found` | Your environment isn't active. Run `source .venv/bin/activate`. |
 | `svc-processing: command not found` | That's the PyPI package name, not the command. The command is `svc-pipeline`. |

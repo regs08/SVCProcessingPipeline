@@ -4,18 +4,26 @@ Tracked notebook assets:
 
 | Path | Purpose |
 |---|---|
-| [`pipeline_demo.ipynb`](pipeline_demo.ipynb) | Headless-runnable demo of loading, processing, plotting, exporting, and averaging SVC spectra. |
-| [`pipeline_demo/`](pipeline_demo/) | Helper package and external demo-data manifest used by the demo notebook. |
+| [`pipeline_demo.ipynb`](pipeline_demo.ipynb) | Pip-first tutorial for loading, processing, plotting, exporting, and averaging SVC spectra. |
+| [`pipeline_demo/`](pipeline_demo/) | Compatibility imports and documentation for the demo notebook. |
 
 The demo notebook is intentionally separate from the production path. Production
 processing enters through `svc-pipeline`, `pipeline.cli`, and the modules in
 `pipeline/`.
 
-Raw `.sig` demo files are external and ignored by Git. Prepare them with:
+Run the notebook top to bottom. Its first code cell checks for the notebook
+helpers and installs `svc-processing[demo]>=0.1.5` into the current kernel when
+needed. A repository clone is optional: the settings cell points `DATA_FOLDER` at
+your existing raw scans, and field data remain outside the public repository
+because instrument headers can contain GPS and time metadata.
+
+For a headless check from the repository root of a development clone:
 
 ```bash
-python3 scripts/prepare_demo_data.py \
-  --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
+SVC_DATA_FOLDER=/path/to/your/sig/folder \
+  MPLBACKEND=Agg jupyter nbconvert --to notebook --execute \
+  --ExecutePreprocessor.timeout=600 notebooks/pipeline_demo.ipynb \
+  --output /tmp/demo_run.ipynb
 ```
 
 See [`pipeline_demo/README.md`](pipeline_demo/README.md) for the full setup and

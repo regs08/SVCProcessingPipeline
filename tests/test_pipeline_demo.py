@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import hashlib
-import importlib.util
-import json
+import importlib
 from pathlib import Path
+import tomllib
 
+import nbformat
 import numpy as np
 import pytest
 
+from pipeline import notebook as svc
+from tests.notebook_data import FILE_COUNT, REFERENCE_INDICES, create_notebook_test_data
+
 
 ROOT = Path(__file__).resolve().parents[1]
-SVC_PATH = ROOT / "notebooks" / "pipeline_demo" / "svc.py"
-SPEC = importlib.util.spec_from_file_location("pipeline_demo_svc", SVC_PATH)
-assert SPEC is not None and SPEC.loader is not None
-svc = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(svc)
+NOTEBOOK_PATH = ROOT / "notebooks" / "pipeline_demo.ipynb"
 
 
 class DummySpectrum:
@@ -30,45 +29,46 @@ class DummyCollection:
         self.spectra = spectra
 
 
-def _write_manifest(tmp_path: Path, payload: bytes) -> tuple[Path, Path]:
-    spectra_dir = tmp_path / "spectra"
-    spectra_dir.mkdir()
-    sig_path = spectra_dir / "demo.sig"
-    sig_path.write_bytes(payload)
-    manifest = {
-        "files": [
-            {
-                "name": "demo.sig",
-                "size_bytes": len(payload),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-            }
-        ]
-    }
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest))
-    return spectra_dir, manifest_path
+def test_notebook_test_data_is_private(tmp_path: Path) -> None:
+    spectra_dir = create_notebook_test_data(tmp_path / "spectra")
+    sig_files = sorted(spectra_dir.glob("*.sig"))
+
+    assert len(sig_files) == FILE_COUNT
+
+    forbidden_headers = ("longitude=", "latitude=", "gpstime=", "time=", "site=")
+    for path in sig_files:
+        text = path.read_text()
+        assert "instrument= HI: 2212118 (HR-1024i)" in text
+        assert "integration= synthetic" in text
+        assert not any(header in text.lower() for header in forbidden_headers)
 
 
-def test_verify_demo_data_accepts_matching_manifest(tmp_path: Path) -> None:
-    spectra_dir, manifest_path = _write_manifest(tmp_path, b"synthetic")
+def test_notebook_api_runs_end_to_end_with_sig_data(tmp_path: Path) -> None:
+    spectra_dir = create_notebook_test_data(tmp_path / "spectra")
+    config = svc.build_config(spectra_dir, tmp_path / "output")
 
-    assert svc.verify_demo_data(spectra_dir, manifest_path) == spectra_dir
+    assert config.instrument == "bronze"
+    assert config.end_line == "2520.4"
+    config.prepare()
 
+    collection = svc.SpectraCollection.from_config(config)
+    assert len(collection) == FILE_COUNT
+    collection.filter_reference_scans().filter_outliers().process()
 
-def test_verify_demo_data_reports_missing_files(tmp_path: Path) -> None:
-    spectra_dir, manifest_path = _write_manifest(tmp_path, b"synthetic")
-    (spectra_dir / "demo.sig").unlink()
+    assert len(collection) == FILE_COUNT - len(REFERENCE_INDICES)
+    for spectrum in collection.spectra:
+        assert np.array_equal(spectrum.wavelengths, svc.STANDARD_WAVELENGTHS)
+        assert np.isfinite(spectrum.reflectance).all()
 
-    with pytest.raises(FileNotFoundError, match="Demo .sig data are missing"):
-        svc.verify_demo_data(spectra_dir, manifest_path)
+    spectra_csv = svc.save_spectra_csv(collection, tmp_path / "output" / "spectra.csv")
+    groups = [
+        tuple(range(i, min(i + 2, len(collection.spectra))))
+        for i in range(0, len(collection.spectra), 2)
+    ]
+    pairs = svc.average_pairs(collection, groups=groups)
 
-
-def test_verify_demo_data_reports_checksum_mismatch(tmp_path: Path) -> None:
-    spectra_dir, manifest_path = _write_manifest(tmp_path, b"synthetic")
-    (spectra_dir / "demo.sig").write_bytes(b"changed")
-
-    with pytest.raises(RuntimeError, match="failed manifest verification"):
-        svc.verify_demo_data(spectra_dir, manifest_path)
+    assert spectra_csv.exists()
+    assert pairs.shape == (6, len(svc.STANDARD_WAVELENGTHS))
 
 
 def test_average_pairs_checks_bounds() -> None:
@@ -99,8 +99,54 @@ def test_average_pairs_requires_processed_spectra() -> None:
         svc.average_pairs(collection)
 
 
-def test_demo_helper_imports_public_resampler_api() -> None:
-    source = SVC_PATH.read_text()
+def test_repo_compatibility_module_reexports_installed_helpers() -> None:
+    compatibility_module = importlib.import_module("notebooks.pipeline_demo.svc")
+
+    assert compatibility_module.Spectrum is svc.Spectrum
+    assert compatibility_module.SpectraCollection is svc.SpectraCollection
+    assert compatibility_module.verify_demo_data is svc.verify_demo_data
+
+
+def test_notebook_is_pip_first_and_path_independent() -> None:
+    notebook = nbformat.read(NOTEBOOK_PATH, as_version=4)
+    code_cells = [cell for cell in notebook.cells if cell.cell_type == "code"]
+    all_code = "\n".join(cell.source for cell in code_cells)
+
+    assert 'PYPI_SPEC = "svc-processing[demo]>=0.1.5"' in code_cells[0].source
+    assert "SVCProcessingPipeline/archive/refs/heads/main.zip" in code_cells[0].source
+    assert "subprocess.check_call" in code_cells[0].source
+    assert "pipeline.notebook" in code_cells[0].source
+    assert "from pipeline.notebook import" in all_code
+    assert "SVC_DATA_FOLDER" in all_code
+    assert "create_demo_data" not in all_code
+    assert "sys.path" not in all_code
+    assert "PROJECT_ROOT" not in all_code
+    assert "notebooks/pipeline_demo/demo_data" not in all_code
+    assert all(cell.execution_count is None and not cell.outputs for cell in code_cells)
+    assert notebook.metadata.kernelspec.display_name == "Python 3"
+
+
+def test_package_discovery_excludes_generated_outputs() -> None:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        config = tomllib.load(handle)
+    discovery = config["tool"]["setuptools"]["packages"]["find"]
+
+    assert discovery["include"] == ["pipeline", "pipeline.*"]
+    assert discovery["namespaces"] is False
+
+
+def test_demo_extra_covers_notebook_runtime_and_execution_dependencies() -> None:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        config = tomllib.load(handle)
+
+    runtime = set(config["project"]["dependencies"])
+    demo = set(config["project"]["optional-dependencies"]["demo"])
+    assert {"numpy", "pandas", "scipy"} <= runtime
+    assert {"ipykernel", "matplotlib", "nbclient", "nbconvert", "nbformat"} <= demo
+
+
+def test_notebook_helper_imports_public_resampler_api() -> None:
+    source = (ROOT / "pipeline" / "notebook.py").read_text()
 
     assert "_read_sig" not in source
     assert "_gaussian_resample" not in source

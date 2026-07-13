@@ -48,7 +48,7 @@ svc-pipeline
 setup script once, then activate the environment it created:
 
 ```bash
-./setup.sh            # creates .venv, installs everything, stages the demo data
+./setup.sh            # creates .venv and installs the project + notebook tools
 # ./setup.sh --dev    # add the test & lint tools for development
 
 source .venv/bin/activate          # macOS / Linux
@@ -178,6 +178,7 @@ The most-used entry points (all importable from their concrete modules — `pipe
 ```python
 from pipeline.sig_processor import SigFileProcessor   # truncation + instrument inspection
 from pipeline.resampler      import process_sig_file, resample_spectra
+from pipeline.notebook       import Spectrum, SpectraCollection, build_config
 from pipeline.processor      import (
     SVCDataProcessor,      # chainable load/group/average
     SigSpectraAverager,    # facade — pass a DataFrame, get aggregated DataFrame back
@@ -202,17 +203,20 @@ Detailed signatures and behavioural notes in [`pipeline/README.md`](pipeline/REA
 
 ## Demo Notebook
 
-The demo notebook uses an external 15-file `.sig` artifact because raw headers
-contain GPS/location metadata. Prepare local demo data with:
-
-```bash
-python3 scripts/prepare_demo_data.py \
-  --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
-```
-
-The notebook is config-driven: edit the settings cell (`DATA_FOLDER`,
-`OUTPUT_FOLDER`, `INSTRUMENT`) to run it on your own data and instrument. See
+[`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) is designed to
+be shared as a standalone file: its first code cell checks for the notebook
+helpers, installs `svc-processing[demo]>=0.1.5` into the current kernel when
+needed, and falls back to the public GitHub source archive while that release is
+not yet on PyPI. The tutorial assumes you have an authorized folder of raw
+`.sig` scans; set `DATA_FOLDER`, `OUTPUT_FOLDER`, `INSTRUMENT`, and `END_LINE` in
+the opening cells. Raw field scans are not shipped in the public repository
+because their headers can contain time and GPS metadata.
+See
 [`notebooks/pipeline_demo/README.md`](notebooks/pipeline_demo/README.md).
+
+Authorized parity work can still stage the separate external field dataset with
+[`scripts/prepare_demo_data.py`](scripts/prepare_demo_data.py); those raw files
+never enter the package or default notebook path.
 
 ---
 
@@ -222,7 +226,7 @@ Python 3.11 is the supported runtime. Runtime, demo, and development
 dependencies are declared in [`pyproject.toml`](pyproject.toml).
 
 - `numpy`, `scipy`, `pandas` — numerical core.
-- `matplotlib` — demo notebook plotting.
+- `matplotlib`, `ipykernel` — demo notebook plotting and execution.
 - `pytest>=8.3.0` — test runner for local verification.
 
 Install with `python -m pip install -e ".[dev,demo]"` for local development and

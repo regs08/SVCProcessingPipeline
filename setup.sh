@@ -5,7 +5,6 @@
 # What it does (so you don't have to remember the steps):
 #   1. Creates an isolated .venv in this repo (Python 3.11+).
 #   2. Installs the pipeline, its science libraries, and Jupyter into it.
-#   3. Copies the bundled example dataset into place.
 #
 # It always operates on THIS repo, no matter which folder you run it from —
 # that avoids the "Directory '.' is not installable" and "No module named
@@ -69,11 +68,6 @@ echo "==> Installing the pipeline (editable) with [$EXTRAS] extras"
 
 echo "==> Installing JupyterLab"
 "$VENV_PY" -m pip install jupyterlab
-
-# ── 3. Stage the bundled example dataset ──────────────────────────────────────
-echo "==> Copying the bundled example dataset into place"
-"$VENV_PY" scripts/prepare_demo_data.py \
-  --source-dir data/a4any_sb_2025-cn_ch-svc-aviris_bottom
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 cat <<'DONE'

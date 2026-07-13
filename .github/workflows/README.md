@@ -10,9 +10,11 @@ Runs on every pull request, on pushes to `main`, and on manual dispatch
 2. Byte-compiles all tracked Python files (`py_compile`).
 3. Lints with `ruff check`.
 4. Runs the test suite with `pytest -q`.
-5. Smoke-tests the demo notebook **only if** external demo `.sig` files are
-   present under `notebooks/pipeline_demo/demo_data/spectra/` (skipped otherwise,
-   so a fresh clone without the private data still passes).
+5. Builds the wheel, installs it with demo dependencies into a fresh virtual
+   environment, copies the notebook to an empty directory outside the checkout,
+   generates test-only `.sig` inputs, and executes the notebook with their path
+   supplied through `SVC_DATA_FOLDER`. This verifies that the notebook does not
+   succeed accidentally through repository-local imports or private field data.
 
 ## [`publish.yml`](publish.yml) — Publish to PyPI
 Runs when a version tag matching `v*` (e.g. `v0.1.0`) is pushed, or on manual

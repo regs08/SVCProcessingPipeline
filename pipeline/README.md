@@ -7,6 +7,12 @@ the run config to the two science modules (`sig_processor`, `resampler`).
 
 ## Modules
 
+### [`notebook.py`](notebook.py) — installed notebook API
+Beginner-facing wrappers used by the pip-first tutorial: `PipelineConfig`,
+`build_config`, `Spectrum`, `SpectraCollection`, plotting helpers, CSV export,
+and repeat-scan grouping. The module uses the public processing APIs below and
+is installed with the wheel, so notebooks never need repository path injection.
+
 ### [`cli.py`](cli.py) — command-line interface (`main`)
 Thin glue, no config or processing logic of its own: parses arguments, configures logging, and for each input directory wires a `RunConfig` to a `Pipeline`. Installed as `svc-pipeline`.
 
@@ -82,7 +88,9 @@ production CLI; intended for use in notebooks and ad-hoc analysis.
 - **`find_spectra_by_name(dataframes, search_key, *, name_column='name', case_sensitive=False, exact_match=False)`** — search across multiple frames; results are annotated with a `_source_index` column.
 
 ### [`__init__.py`](__init__.py)
-Empty marker. Import classes from their concrete modules (e.g. `from pipeline.sig_processor import SigFileProcessor`).
+Empty marker. Import classes from their concrete modules (e.g.
+`from pipeline.sig_processor import SigFileProcessor` or
+`from pipeline.notebook import Spectrum`).
 
 ## Adding a new stage
 Subclass `SigFileProcessor` (truncation/inspection) or wrap `resample_spectra` to insert pre-/post-processing. Keep numerical constants in `resampler.py` aligned with the algorithm documented in [`docs/supplementary_methods.md`](../docs/supplementary_methods.md); changing them invalidates the parity claim and the parity test in [`tests/test_resampler_parity.py`](../tests/test_resampler_parity.py) must be re-run.
