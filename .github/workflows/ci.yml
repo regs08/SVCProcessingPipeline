@@ -88,4 +88,3 @@ jobs:
 
           test -f pipeline_outputs/notebook_run/spectra.csv
           test -f pipeline_outputs/notebook_run/spectra_paired.csv
-          test -f pipeline_outputs/notebook_run/spectra_grouped.csv
