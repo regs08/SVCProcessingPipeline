@@ -4,11 +4,14 @@ import importlib
 from pathlib import Path
 import tomllib
 
+import matplotlib.pyplot as plt
 import nbformat
 import numpy as np
+import pandas as pd
 import pytest
 
 from pipeline import notebook as svc
+from pipeline.processor import GroupSpec
 from tests.notebook_data import FILE_COUNT, REFERENCE_INDICES, create_notebook_test_data
 
 
@@ -97,6 +100,33 @@ def test_average_pairs_requires_processed_spectra() -> None:
 
     with pytest.raises(RuntimeError, match="not yet processed"):
         svc.average_pairs(collection)
+
+
+def test_plot_groups_uses_named_group_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spectra_csv = tmp_path / "spectra.csv"
+    pd.DataFrame(
+        {
+            "sample_name": ["leaf.0000", "leaf.0001", "leaf.0011"],
+            "400": [0.10, 0.20, 0.50],
+            "401": [0.11, 0.21, 0.51],
+        }
+    ).to_csv(spectra_csv, index=False)
+
+    groups = [
+        GroupSpec(members=(0, 1), name="asymptomatic"),
+        GroupSpec(members=(11,), name="symptomatic"),
+    ]
+    grouped = svc.average_groups(spectra_csv, groups)
+
+    monkeypatch.setattr(plt, "show", lambda: None)
+    ax = svc.plot_groups(spectra_csv, groups, grouped)
+    labels = [text.get_text() for text in ax.get_legend().get_texts()]
+    plt.close(ax.figure)
+
+    assert labels == [
+        "asymptomatic  (scans [0, 1])",
+        "symptomatic  (scans [11])",
+    ]
 
 
 def test_repo_compatibility_module_reexports_installed_helpers() -> None:

@@ -720,7 +720,8 @@ def average_groups(csv_path: str | Path, groups: list[tuple]) -> pd.DataFrame:
     Parameters
     ----------
     csv_path : path to the *_merged_spectra.csv produced by the pipeline
-    groups   : list of scan-number tuples, e.g. [(1, 2, 3), (4, 5, 6)]
+    groups   : list of scan-number tuples or named group specs, e.g.
+               [(1, 2, 3), (4, 5, 6)] or GroupSpec(..., name="symptomatic")
 
     Returns
     -------
@@ -728,6 +729,25 @@ def average_groups(csv_path: str | Path, groups: list[tuple]) -> pd.DataFrame:
     """
     averager = SigSpectraAverager.from_csv(str(csv_path), sample_col="sample_name")
     return averager.aggregate(groups)
+
+
+def _normalize_groups_for_plot(groups: list[tuple]) -> list[tuple[tuple[int, ...], str | None]]:
+    """Return ``(scan_numbers, group_name)`` pairs for tuple or GroupSpec inputs."""
+    normalized_groups: list[tuple[tuple[int, ...], str | None]] = []
+    for group in groups:
+        group_name = getattr(group, "name", None)
+        members_source = getattr(group, "members", group)
+
+        if isinstance(members_source, (str, bytes)):
+            members = (int(members_source),)
+        else:
+            try:
+                members = tuple(int(member) for member in members_source)
+            except TypeError:
+                members = (int(members_source),)
+
+        normalized_groups.append((members, group_name))
+    return normalized_groups
 
 
 # ── Collection export ──────────────────────────────────────────────────────────
@@ -1146,16 +1166,17 @@ def plot_groups(
     csv_path: str | Path,
     groups: list[tuple],
     averaged_dataframe: pd.DataFrame,
-) -> None:
+) -> plt.Axes:
     """
     Plot individual scans (faded) behind their group mean spectra (bold).
 
     Parameters
     ----------
     csv_path           : path to the *_merged_spectra.csv
-    groups             : same list of tuples passed to average_groups()
+    groups             : same list of tuples or named group specs passed to average_groups()
     averaged_dataframe : the DataFrame returned by average_groups()
     """
+    normalized_groups = _normalize_groups_for_plot(groups)
     full_dataframe = pd.read_csv(csv_path, index_col=0)
     wavelength_columns = [col for col in full_dataframe.columns if str(col).isdigit()]
     wavelengths = np.array([int(col) for col in wavelength_columns])
@@ -1166,7 +1187,11 @@ def plot_groups(
     ]
     averaged_wavelengths = np.array([int(col) for col in averaged_wavelength_columns])
 
-    all_scan_numbers = {scan_number for group in groups for scan_number in group}
+    all_scan_numbers = {
+        scan_number
+        for group_members, _ in normalized_groups
+        for scan_number in group_members
+    }
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     fig, ax = plt.subplots(figsize=(12, 5))
@@ -1180,7 +1205,9 @@ def plot_groups(
         if scan_number not in all_scan_numbers:
             continue
         group_index = next(
-            index for index, group in enumerate(groups) if scan_number in group
+            index
+            for index, (group_members, _) in enumerate(normalized_groups)
+            if scan_number in group_members
         )
         color = color_cycle[group_index % len(color_cycle)]
         ax.plot(
@@ -1191,8 +1218,16 @@ def plot_groups(
 
     # Group means — bold, with legend labels
     for group_index, (_, row) in enumerate(averaged_dataframe.iterrows()):
+        group_members, group_name = normalized_groups[group_index]
+        row_name = row.get("name")
+        if row_name is not None and not pd.isna(row_name):
+            label_name = str(row_name)
+        elif group_name:
+            label_name = str(group_name)
+        else:
+            label_name = f"Group {group_index + 1}"
         color = color_cycle[group_index % len(color_cycle)]
-        label = f"Group {group_index + 1}  (scans {list(groups[group_index])})"
+        label = f"{label_name}  (scans {list(group_members)})"
         ax.plot(
             averaged_wavelengths,
             row[averaged_wavelength_columns].values.astype(float),
@@ -1206,6 +1241,7 @@ def plot_groups(
     ax.grid(alpha=0.2)
     plt.tight_layout()
     plt.show()
+    return ax
 
 
 __all__ = [

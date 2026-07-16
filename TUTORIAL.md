@@ -130,6 +130,19 @@ and removes anything after it. This is a calibration/setup task—not a value yo
 need to rediscover for every routine processing run with the same calibrated
 instrument.
 
+> **Why an incorrect end line causes later sensor-sweep warnings:** Stage 1
+> looks for a data row whose text starts with the configured value; it does not
+> choose the closest wavelength or compare the values numerically. For example,
+> `"2518.6"` does not match a scan whose last valid wavelength is `2518.0`. If
+> the exact value is absent, Stage 1 warns that the file will not be truncated
+> and copies its trailing rows through unchanged. Stage 2 may then report that
+> it found more than the HR-1024i's three sensor sweeps, because corrupt or
+> duplicated export rows after the valid third sweep now look like additional
+> detectors. The resampler drops those trailing rows and keeps the valid scan,
+> so this message is a warning rather than a failed run. Correct `END_LINE` to
+> the exact maximum first-column value found in the raw files, then re-run from
+> Stage 1 so the files are truncated at the intended point.
+
 ---
 
 # Part A — The gentle path: the tutorial notebook
@@ -556,6 +569,7 @@ svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
 | `Summary CSV not found ... (run --step 1 first)` | You ran `--step 2` before Stage 1. Run `--step all` (or `--step 1` then `--step 2`). |
 | `Merged CSV not found ... (run --step 2 first)` | You ran `--step 3` before Stage 2. Run `--step all` (or `--step 1`, `--step 2`, then `--step 3`). |
 | `Groups CSV not found: ...` | The `groups_csv` path (config or `--groups-csv`) doesn't exist. Check the path. |
+| `End line '...' was not found` followed by `found ... sensor sweeps but the HR-1024i has only 3` | The configured end line is not an exact first-column wavelength in the raw files, so Stage 1 left trailing export rows in place and Stage 2 detected them as extra sweeps. Set `END_LINE` (or the instrument's `end_line` in the config) to the exact maximum wavelength from the raw files and re-run from Stage 1. The resampler warning also confirms that it dropped the trailing rows and kept the valid scan. |
 | A warning that a `processing.*` value "differs from parity-verified default" | You changed a value in the `processing` block. Restore the defaults unless intentional. |
 
 Add `--verbose` to any terminal run to see exactly what each stage is doing.
