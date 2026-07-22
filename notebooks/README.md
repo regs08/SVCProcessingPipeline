@@ -11,11 +11,11 @@ The demo notebook is intentionally separate from the production path. Production
 processing enters through `svc-pipeline`, `pipeline.cli`, and the modules in
 `pipeline/`.
 
-Run the notebook top to bottom. Its first code cell checks for the notebook
-helpers and installs `svc-processing[demo]>=0.1.5` into the current kernel when
-needed. A repository clone is optional: the settings cell points `DATA_FOLDER` at
-your existing raw scans, and field data remain outside the public repository
-because instrument headers can contain GPS and time metadata.
+Run the notebook top to bottom in a Python 3.11 or newer kernel. The setup cells
+check the kernel version, then install `svc-processing[demo]>=0.1.6` into the
+current kernel. Set `DATA_FOLDER` to the folder containing your authorized raw
+scans; field data remain outside the public repository because instrument
+headers can contain GPS and time metadata.
 
 For a headless check from the repository root of a development clone:
 

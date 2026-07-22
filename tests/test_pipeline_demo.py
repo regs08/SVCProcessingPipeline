@@ -74,6 +74,20 @@ def test_notebook_api_runs_end_to_end_with_sig_data(tmp_path: Path) -> None:
     assert pairs.shape == (6, len(svc.STANDARD_WAVELENGTHS))
 
 
+def test_notebook_prepare_removes_stale_processed_sig_files(tmp_path: Path) -> None:
+    spectra_dir = create_notebook_test_data(tmp_path / "spectra")
+    config = svc.build_config(spectra_dir, tmp_path / "output")
+
+    config.processed_folder.mkdir(parents=True)
+    stale = config.processed_folder / "demo.070926.0021.sig"
+    stale.write_text("stale previous run")
+
+    config.prepare()
+
+    assert not stale.exists()
+    assert len(list(config.processed_folder.glob("*.sig"))) == FILE_COUNT
+
+
 def test_average_pairs_checks_bounds() -> None:
     collection = DummyCollection(
         [DummySpectrum("a", 1.0), DummySpectrum("b", 3.0), DummySpectrum("c", 10.0)]
@@ -137,23 +151,26 @@ def test_repo_compatibility_module_reexports_installed_helpers() -> None:
     assert compatibility_module.verify_demo_data is svc.verify_demo_data
 
 
-def test_notebook_is_pip_first_and_path_independent() -> None:
+def test_notebook_is_pip_install_and_path_independent() -> None:
     notebook = nbformat.read(NOTEBOOK_PATH, as_version=4)
     code_cells = [cell for cell in notebook.cells if cell.cell_type == "code"]
     all_code = "\n".join(cell.source for cell in code_cells)
 
-    assert 'PYPI_SPEC = "svc-processing[demo]>=0.1.5"' in code_cells[0].source
-    assert "SVCProcessingPipeline/archive/refs/heads/main.zip" in code_cells[0].source
-    assert "subprocess.check_call" in code_cells[0].source
-    assert "pipeline.notebook" in code_cells[0].source
+    assert "sys.version_info < (3, 11)" in code_cells[0].source
+    assert "requires Python 3.11 or newer" in code_cells[0].source
+    assert code_cells[1].source.strip() == '%pip install --upgrade "svc-processing[demo]>=0.1.6"'
+    assert "SVCProcessingPipeline/archive/refs/heads/main.zip" not in all_code
+    assert "subprocess.check_call" not in all_code
+    assert "pipeline.notebook" in all_code
     assert "from pipeline.notebook import" in all_code
     assert "SVC_DATA_FOLDER" in all_code
+    assert "path/to/demo/data" in all_code
     assert "create_demo_data" not in all_code
     assert "sys.path" not in all_code
     assert "PROJECT_ROOT" not in all_code
     assert "notebooks/pipeline_demo/demo_data" not in all_code
     assert all(cell.execution_count is None and not cell.outputs for cell in code_cells)
-    assert notebook.metadata.kernelspec.display_name == "Python 3"
+    assert notebook.metadata.kernelspec.display_name == "Python 3.11"
 
 
 def test_package_discovery_excludes_generated_outputs() -> None:

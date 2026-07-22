@@ -156,6 +156,8 @@ class PipelineConfig:
             )
         self._warn_if_end_line_unmatched(sig_files)
         self.processed_folder.mkdir(parents=True, exist_ok=True)
+        for stale_sig in self.processed_folder.glob("*.sig"):
+            stale_sig.unlink()
         # Truncate at the resolved end line (instrument default, or your override).
         SigFileProcessor(
             correction_value=self.end_line,

@@ -204,13 +204,12 @@ Detailed signatures and behavioural notes in [`pipeline/README.md`](pipeline/REA
 ## Demo Notebook
 
 [`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) is designed to
-be shared as a standalone file: its first code cell checks for the notebook
-helpers, installs `svc-processing[demo]>=0.1.5` into the current kernel when
-needed, and falls back to the public GitHub source archive while that release is
-not yet on PyPI. The tutorial assumes you have an authorized folder of raw
-`.sig` scans; set `DATA_FOLDER`, `OUTPUT_FOLDER`, `INSTRUMENT`, and `END_LINE` in
-the opening cells. Raw field scans are not shipped in the public repository
-because their headers can contain time and GPS metadata.
+be shared as a standalone file. In a Python 3.11 or newer kernel, its setup
+cells check the kernel version and install `svc-processing[demo]>=0.1.6`. The
+tutorial assumes you have an authorized folder of raw `.sig` scans; set
+`DATA_FOLDER`, `OUTPUT_FOLDER`, `INSTRUMENT`, and `END_LINE` in the opening
+cells. Raw field scans are not shipped in the public repository because their
+headers can contain time and GPS metadata.
 See
 [`notebooks/pipeline_demo/README.md`](notebooks/pipeline_demo/README.md).
 

@@ -171,11 +171,10 @@ directory, this terminal command helps locate them:
 find data -type f -name '*.sig' | head
 ```
 
-Open the notebook and run its first code cell. It checks whether the notebook
-helpers are already available; if not, it installs `svc-processing[demo]>=0.1.5`
-into the current kernel. While that release is not yet available from PyPI, the
-same setup cell falls back to installing from the public GitHub source archive.
-No editable install, repository clone, or Python-path modification is needed.
+Open the notebook in a Python 3.11 or newer kernel and run the setup cells. They
+check the kernel version, then install `svc-processing[demo]>=0.1.6` into the
+current kernel. No editable install, repository clone, or Python-path
+modification is needed.
 
 > **Working from a repository clone?** `./setup.sh` is still available for
 > contributors. It creates `.venv`, installs the project in editable mode,
@@ -559,7 +558,8 @@ svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
 | Message / symptom | What it means & the fix |
 |---|---|
 | Notebook says no `.sig` files were found | Set `DATA_FOLDER` to the containing folder, confirm the files end in `.sig`, and re-run from the settings cell. |
-| Notebook: `ModuleNotFoundError: pipeline.notebook` / `matplotlib` | Re-run the first setup/install cell in the current kernel. If PyPI reports that `svc-processing>=0.1.5` is unavailable, publish the release or make sure the public GitHub source archive contains these notebook-helper changes. |
+| `No matching distribution found for svc-processing` / `from versions: none` | The active notebook kernel is probably older than Python 3.11. Switch Jupyter to a Python 3.11+ kernel, then rerun the setup cells. |
+| Notebook: `ModuleNotFoundError: pipeline.notebook` / `matplotlib` | Re-run the first setup/install cell in the current kernel and confirm it installs `svc-processing[demo]>=0.1.6` successfully. |
 | `jupyter: command not found` | Install the app: `python -m pip install jupyterlab`. |
 | `svc-pipeline: command not found` | Your environment isn't active. Run `source .venv/bin/activate`. |
 | `svc-processing: command not found` | That's the PyPI package name, not the command. The command is `svc-pipeline`. |

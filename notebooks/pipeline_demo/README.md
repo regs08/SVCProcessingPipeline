@@ -6,11 +6,10 @@ CSV export, and repeat-scan averaging.
 
 ## Run without cloning the repository
 
-Download the notebook, open it in a Python 3.11 Jupyter environment, and run it
-top to bottom. Its first executable cell checks for the notebook helpers and
-installs `svc-processing[demo]>=0.1.5` into the current kernel when needed. While
-that release is not yet on PyPI, the same cell falls back to the public GitHub
-source archive. No repository clone or manual Python-path setup is required.
+Download the notebook, open it in a Python 3.11 or newer Jupyter environment,
+and run it top to bottom. The setup cells check the kernel version, then install
+`svc-processing[demo]>=0.1.6` into the current kernel. No repository clone or
+manual Python-path setup is required.
 
 The tutorial assumes you already have a folder of authorized raw `.sig` scans.
 Set `DATA_FOLDER` to that containing folder before continuing. The public repo
@@ -31,8 +30,8 @@ In the settings cells:
   the calibrated default does not match your instrument; and
 - choose an `OUTPUT_FOLDER` where the processed files and CSVs should be saved.
 
-You can download the notebook alone, or get all project documentation and config
-examples with:
+You can download the notebook alone, or clone the repository to get all project
+documentation and config examples:
 
 ```bash
 git clone https://github.com/regs08/SVCProcessingPipeline.git
