@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "dataset_id": "a4any_sb_2025-cn_ch-svc-aviris_bottom",
-  "description": "Selected 15-file SVC HR-1024i demo dataset used by notebooks/pipeline_demo.ipynb. Raw .sig files are external because headers contain GPS/location metadata.",
+  "description": "Selected 15-file SVC HR-1024i demo dataset used by notebooks/pipeline_demo/pipeline_demo_notebook.ipynb. Raw .sig files are external because headers contain GPS/location metadata.",
   "artifact_url": null,
   "artifact_doi": null,
   "expected_target_dir": "notebooks/pipeline_demo/demo_data/spectra",

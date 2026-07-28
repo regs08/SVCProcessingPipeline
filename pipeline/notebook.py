@@ -17,6 +17,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from pipeline.resampler import ProcessedSpectrum, process_sig_file
+from pipeline.sig_files import find_sig_files
 from pipeline.sig_processor import SigFileProcessor
 from pipeline.processor import SigSpectraAverager
 
@@ -147,7 +148,7 @@ class PipelineConfig:
         Reads ``data_folder`` and writes truncated copies into ``processed_folder``.
         Run this once before loading spectra.
         """
-        sig_files = sorted(Path(self.data_folder).glob("*.sig"))
+        sig_files = find_sig_files(self.data_folder)
         if not sig_files:
             raise FileNotFoundError(
                 f"No .sig files found in {self.data_folder}.\n"
@@ -374,7 +375,7 @@ class Spectrum:
     def from_config(cls, config: "PipelineConfig", path: str | Path | None = None) -> "Spectrum":
         """Load one scan from a config's processed folder (first file by default)."""
         if path is None:
-            sig_files = sorted(Path(config.processed_folder).glob("*.sig"))
+            sig_files = find_sig_files(config.processed_folder)
             if not sig_files:
                 raise FileNotFoundError(
                     f"No processed .sig files in {config.processed_folder}. "
@@ -515,7 +516,7 @@ class SpectraCollection:
         processing: dict | None = None,
     ) -> None:
         directory = Path(directory)
-        sig_files = sorted(directory.glob("*.sig"))
+        sig_files = find_sig_files(directory)
         if n_files is not None:
             sig_files = sig_files[:n_files]
         if not sig_files:

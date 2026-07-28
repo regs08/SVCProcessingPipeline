@@ -8,7 +8,7 @@ There are **two ways to use this pipeline**, and this tutorial is built around
 the first:
 
 - **🌱 The notebook (gentle — start here).** The tutorial notebook
-  [`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) walks through
+  [`notebooks/pipeline_demo/pipeline_demo_notebook.ipynb`](notebooks/pipeline_demo/pipeline_demo_notebook.ipynb) walks through
   the *entire* pipeline interactively and draws a plot at every step. You load
   your scans, clean them, and average them — all in one place, seeing exactly
   what happens. This is the recommended entry point for almost everyone.
@@ -154,7 +154,7 @@ happen step by step, and saved averaged spectra — all without leaving Jupyter.
 
 You need a Python 3.11 notebook environment and a folder containing your raw
 `.sig` scans. You can download
-[`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) by itself, or
+[`notebooks/pipeline_demo/pipeline_demo_notebook.ipynb`](notebooks/pipeline_demo/pipeline_demo_notebook.ipynb) by itself, or
 clone the repository to keep the notebook, tutorial, configs, and tests together:
 
 ```bash
@@ -172,7 +172,7 @@ find data -type f -name '*.sig' | head
 ```
 
 Open the notebook in a Python 3.11 or newer kernel and run the setup cells. They
-check the kernel version, then install `svc-processing[demo]>=0.1.6` into the
+check the kernel version, then install `svc-processing[demo]>=0.1.7` into the
 current kernel. No editable install, repository clone, or Python-path
 modification is needed.
 
@@ -190,7 +190,7 @@ python3.11 -m pip install jupyterlab
 jupyter lab
 ```
 
-A browser tab opens; click `pipeline_demo.ipynb`. VS Code users can instead open
+A browser tab opens; click `pipeline_demo/pipeline_demo_notebook.ipynb`. VS Code users can instead open
 the file directly with the Python and Jupyter extensions.
 
 ## A3. How to run cells
@@ -559,7 +559,7 @@ svc-pipeline config.json --step 3 --groups-csv naming_ids/my_groups.csv
 |---|---|
 | Notebook says no `.sig` files were found | Set `DATA_FOLDER` to the containing folder, confirm the files end in `.sig`, and re-run from the settings cell. |
 | `No matching distribution found for svc-processing` / `from versions: none` | The active notebook kernel is probably older than Python 3.11. Switch Jupyter to a Python 3.11+ kernel, then rerun the setup cells. |
-| Notebook: `ModuleNotFoundError: pipeline.notebook` / `matplotlib` | Re-run the first setup/install cell in the current kernel and confirm it installs `svc-processing[demo]>=0.1.6` successfully. |
+| Notebook: `ModuleNotFoundError: pipeline.notebook` / `matplotlib` | Re-run the first setup/install cell in the current kernel and confirm it installs `svc-processing[demo]>=0.1.7` successfully. |
 | `jupyter: command not found` | Install the app: `python -m pip install jupyterlab`. |
 | `svc-pipeline: command not found` | Your environment isn't active. Run `source .venv/bin/activate`. |
 | `svc-processing: command not found` | That's the PyPI package name, not the command. The command is `svc-pipeline`. |

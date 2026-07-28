@@ -203,9 +203,9 @@ Detailed signatures and behavioural notes in [`pipeline/README.md`](pipeline/REA
 
 ## Demo Notebook
 
-[`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) is designed to
+[`notebooks/pipeline_demo/pipeline_demo_notebook.ipynb`](notebooks/pipeline_demo/pipeline_demo_notebook.ipynb) is designed to
 be shared as a standalone file. In a Python 3.11 or newer kernel, its setup
-cells check the kernel version and install `svc-processing[demo]>=0.1.6`. The
+cells check the kernel version and install `svc-processing[demo]>=0.1.7`. The
 tutorial assumes you have an authorized folder of raw `.sig` scans; set
 `DATA_FOLDER`, `OUTPUT_FOLDER`, `INSTRUMENT`, and `END_LINE` in the opening
 cells. Raw field scans are not shipped in the public repository because their

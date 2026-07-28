@@ -16,7 +16,7 @@ from tests.notebook_data import FILE_COUNT, REFERENCE_INDICES, create_notebook_t
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK_PATH = ROOT / "notebooks" / "pipeline_demo.ipynb"
+NOTEBOOK_PATH = ROOT / "notebooks" / "pipeline_demo" / "pipeline_demo_notebook.ipynb"
 
 
 class DummySpectrum:
@@ -158,7 +158,7 @@ def test_notebook_is_pip_install_and_path_independent() -> None:
 
     assert "sys.version_info < (3, 11)" in code_cells[0].source
     assert "requires Python 3.11 or newer" in code_cells[0].source
-    assert code_cells[1].source.strip() == '%pip install --upgrade "svc-processing[demo]>=0.1.6"'
+    assert code_cells[1].source.strip() == '%pip install --upgrade "svc-processing[demo]>=0.1.7"'
     assert "SVCProcessingPipeline/archive/refs/heads/main.zip" not in all_code
     assert "subprocess.check_call" not in all_code
     assert "pipeline.notebook" in all_code

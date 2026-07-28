@@ -59,8 +59,8 @@ svcProcessingPipeline/
 │
 ├── notebooks/                      # Demo/analysis notebooks (not on the production path)
 │   ├── README.md
-│   ├── pipeline_demo.ipynb                     # pip-first end-to-end tutorial
-│   ├── pipeline_demo/                          # notebook docs + compatibility imports
+│   ├── pipeline_demo/                          # tutorial notebook, docs + compatibility imports
+│   │   ├── pipeline_demo_notebook.ipynb        # pip-first end-to-end tutorial
 │   │   ├── __init__.py
 │   │   ├── README.md
 │   │   ├── demo_data_manifest.json             # external raw-data manifest
@@ -87,7 +87,7 @@ svcProcessingPipeline/
 5. **[tests/README.md](tests/README.md)** — how correctness is verified.
 6. **[archived_r_scripts/README.md](archived_r_scripts/README.md)** — the R reference, kept for parity verification only.
 7. **[docs/README.md](docs/README.md)** + parity reports — historical evidence and the LLM-driven re-test workflow.
-8. **[notebooks/pipeline_demo.ipynb](notebooks/pipeline_demo.ipynb)** and **[naming_ids/README.md](naming_ids/README.md)** — analysis-side conveniences; not on the production hot path.
+8. **[notebooks/pipeline_demo/pipeline_demo_notebook.ipynb](notebooks/pipeline_demo/pipeline_demo_notebook.ipynb)** and **[naming_ids/README.md](naming_ids/README.md)** — analysis-side conveniences; not on the production hot path.
 
 ## Gitignored paths (do not commit)
 

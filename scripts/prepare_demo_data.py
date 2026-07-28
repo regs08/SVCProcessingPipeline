@@ -139,7 +139,10 @@ def prepare_from_archive(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Copy or verify external .sig demo data for notebooks/pipeline_demo.ipynb."
+        description=(
+            "Copy or verify external .sig demo data for "
+            "notebooks/pipeline_demo/pipeline_demo_notebook.ipynb."
+        )
     )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--target-dir", type=Path, default=DEFAULT_TARGET)

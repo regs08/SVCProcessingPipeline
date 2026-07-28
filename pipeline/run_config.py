@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .sig_files import find_sig_files
 from .sig_processor import SigFileProcessor
 
 # Reference snapshots of SigFileProcessor's built-in calibration tables, used as
@@ -211,7 +212,7 @@ class RunConfig:
 
         subdirs: list[Path] = []
         for child in sorted(base_dir.iterdir()):
-            if child.is_dir() and any(gc.suffix.lower() == ".sig" for gc in child.glob("*.sig")):
+            if child.is_dir() and find_sig_files(child):
                 subdirs.append(child)
         return subdirs or [base_dir]
 

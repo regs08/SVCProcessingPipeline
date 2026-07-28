@@ -24,6 +24,22 @@ def test_process_single_file_truncates_at_end_line(tmp_path: Path) -> None:
     assert "2521.0 0 0 21.0" not in text
 
 
+def test_processing_ignores_temporary_sig_lock_files(tmp_path: Path) -> None:
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    input_dir.mkdir()
+    shutil.copy2(FIXTURE_DIR / "bronze_a.sig", input_dir / "bronze_a.sig")
+    (input_dir / "~$bronze_a.sig").write_bytes(b"\x00not an SVC spectrum")
+
+    processor = SigFileProcessor(correction_type="bronze")
+    processor.process_sig_files(str(input_dir), str(output_dir))
+    consistency = processor.check_instrument_consistency(str(input_dir))
+
+    assert [path.name for path in output_dir.glob("*.sig")] == ["bronze_a.sig"]
+    assert consistency["total_files"] == 1
+    assert consistency["instrument_name"] == "Bronze"
+
+
 def test_get_supported_correction_types_reflects_injected_table() -> None:
     default_processor = SigFileProcessor(correction_type="bronze")
     assert set(default_processor.get_supported_correction_types()) == {"bronze", "silver"}

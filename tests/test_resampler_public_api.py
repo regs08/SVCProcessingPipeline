@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from pipeline.resampler import ProcessedSpectrum, process_sig_file, resample_spectra
 
@@ -28,6 +29,14 @@ def test_process_sig_file_returns_public_intermediates() -> None:
     assert result.output_wavelengths.tolist() == list(range(400, 411))
     assert result.output_reflectance.shape == (11,)
     assert np.isfinite(result.output_reflectance).all()
+
+
+def test_process_sig_file_reports_missing_data_marker(tmp_path: Path) -> None:
+    invalid = tmp_path / "invalid.sig"
+    invalid.write_text("instrument= HI: 2212118 (HR-1024i)\n")
+
+    with pytest.raises(ValueError, match="missing the required 'data=' marker"):
+        process_sig_file(invalid)
 
 
 def test_resample_spectra_delegates_to_single_file_path(tmp_path: Path) -> None:

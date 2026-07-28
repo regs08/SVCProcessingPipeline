@@ -28,6 +28,8 @@ import numpy as np
 import pandas as pd
 from scipy.cluster.vq import kmeans as _scipy_kmeans, vq as _scipy_vq
 
+from pipeline.sig_files import find_sig_files
+
 
 # ── spectrolab replication constants ────────────────────────────────────────
 _FWHM_NM         = 10.0      # spectrolab resample fwhm=10
@@ -70,7 +72,12 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
     with open(path) as fh:
         lines = fh.readlines()
 
-    data_start = next(i for i, line in enumerate(lines) if line.strip() == "data=")
+    try:
+        data_start = next(i for i, line in enumerate(lines) if line.strip() == "data=")
+    except StopIteration:
+        raise ValueError(
+            f"{path} is not a valid SVC .sig file: missing the required 'data=' marker"
+        ) from None
     wls, rfs = [], []
     for line in lines[data_start + 1:]:
         parts = line.split()
@@ -83,6 +90,11 @@ def _read_sig(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
     wls_arr = np.array(wls, dtype=float)
     rfs_arr = np.array(rfs, dtype=float)
+
+    if not len(wls_arr):
+        raise ValueError(
+            f"{path} is not a valid SVC .sig file: no four-column numeric rows follow 'data='"
+        )
 
     wls_arr, rfs_arr = _drop_trailing_junk(wls_arr, rfs_arr, source=path)
 
@@ -469,7 +481,7 @@ def resample_spectra(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    sig_files = sorted(input_dir.glob("*.sig"))
+    sig_files = find_sig_files(input_dir)
     if not sig_files:
         raise ValueError(f"No .sig files found in {input_dir}")
 
