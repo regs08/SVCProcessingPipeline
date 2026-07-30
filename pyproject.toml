@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svc-processing"
-version = "0.1.6"
+version = "0.1.7"
 description = "Pure-Python SVC HR-1024i hyperspectral .sig processing pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -70,4 +70,4 @@ target-version = "py311"
 select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
-"notebooks/pipeline_demo.ipynb" = ["E402"]
+"notebooks/pipeline_demo/pipeline_demo_notebook.ipynb" = ["E402"]

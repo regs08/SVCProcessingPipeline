@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from pipeline.sig_files import find_sig_files
+
 
 class SigFileProcessor:
     """Process .sig files with configurable correction types."""
@@ -131,19 +133,18 @@ class SigFileProcessor:
 
         processed_count = 0
 
-        for entry in sorted(input_dir.iterdir()):
-            if entry.suffix == '.sig':
-                output_file_path = output_dir / entry.name
+        for entry in find_sig_files(input_dir):
+            output_file_path = output_dir / entry.name
 
-                try:
-                    if verbose:
-                        self._log_info(f"Processing: {entry.name}")
-                    self._process_single_file(entry, output_file_path, end_line_start)
-                    processed_count += 1
-                    if verbose:
-                        self._log_info(f"Processed: {entry.name}")
-                except Exception as e:
-                    self._log_error(f"Error processing {entry.name}: {e}")
+            try:
+                if verbose:
+                    self._log_info(f"Processing: {entry.name}")
+                self._process_single_file(entry, output_file_path, end_line_start)
+                processed_count += 1
+                if verbose:
+                    self._log_info(f"Processed: {entry.name}")
+            except Exception as e:
+                self._log_error(f"Error processing {entry.name}: {e}")
 
         if verbose:
             self._log_info(f"Processing complete. {processed_count} files processed.")
@@ -216,18 +217,17 @@ class SigFileProcessor:
         warnings = []
         total_files = 0
 
-        for entry in sorted(folder.iterdir()):
-            if entry.suffix == '.sig':
-                instrument = self.extract_instrument_from_file(str(entry))
-                total_files += 1
+        for entry in find_sig_files(folder):
+            instrument = self.extract_instrument_from_file(str(entry))
+            total_files += 1
 
-                if instrument is None:
-                    warnings.append(f"Could not extract instrument from: {entry.name}")
-                    instrument = "Unknown"
+            if instrument is None:
+                warnings.append(f"Could not extract instrument from: {entry.name}")
+                instrument = "Unknown"
 
-                if instrument not in files_by_instrument:
-                    files_by_instrument[instrument] = []
-                files_by_instrument[instrument].append(entry.name)
+            if instrument not in files_by_instrument:
+                files_by_instrument[instrument] = []
+            files_by_instrument[instrument].append(entry.name)
 
         unique_instruments = list(files_by_instrument.keys())
         is_consistent = len(unique_instruments) == 1

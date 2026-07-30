@@ -80,7 +80,7 @@ Next steps:
        # .venv\Scripts\activate           # Windows PowerShell
   2. Launch the notebook:
        jupyter lab
-     then open notebooks/pipeline_demo.ipynb
+     then open notebooks/pipeline_demo/pipeline_demo_notebook.ipynb
 
 Your prompt showing (.venv) means the environment is active.
 DONE

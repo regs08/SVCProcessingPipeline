@@ -77,14 +77,17 @@ jobs:
           python -c \
             'import sys; from tests.notebook_data import create_notebook_test_data; create_notebook_test_data(sys.argv[1])' \
             "${SMOKE_DIR}/sig-data"
-          cp notebooks/pipeline_demo.ipynb "${SMOKE_DIR}/pipeline_demo.ipynb"
+          cp notebooks/pipeline_demo/pipeline_demo_notebook.ipynb \
+            "${SMOKE_DIR}/pipeline_demo_notebook.ipynb"
           cd "${SMOKE_DIR}"
           SVC_DATA_FOLDER="${SMOKE_DIR}/sig-data" \
             JUPYTER_PATH="${NOTEBOOK_VENV}/share/jupyter" \
             "${NOTEBOOK_VENV}/bin/python" -m nbconvert --to notebook --execute \
               --ExecutePreprocessor.kernel_name=svc-smoke \
               --ExecutePreprocessor.timeout=600 \
-              pipeline_demo.ipynb --output demo_run.ipynb
+              pipeline_demo_notebook.ipynb --output demo_run.ipynb
 
-          test -f pipeline_outputs/notebook_run/spectra.csv
-          test -f pipeline_outputs/notebook_run/spectra_paired.csv
+          find pipeline_outputs \
+            -path "*_rename_to_keep/spectra.csv" -type f -print -quit | grep -q .
+          find pipeline_outputs \
+            -path "*_rename_to_keep/spectra_paired.csv" -type f -print -quit | grep -q .

@@ -1,16 +1,15 @@
 # Pipeline Demo Notebook
 
-[`../pipeline_demo.ipynb`](../pipeline_demo.ipynb) is a pip-first walkthrough
+[`pipeline_demo_notebook.ipynb`](pipeline_demo_notebook.ipynb) is a pip-first walkthrough
 of Stage 1 truncation, Stage 2 resampling, reference/outlier filtering, plotting,
 CSV export, and repeat-scan averaging.
 
 ## Run without cloning the repository
 
-Download the notebook, open it in a Python 3.11 Jupyter environment, and run it
-top to bottom. Its first executable cell checks for the notebook helpers and
-installs `svc-processing[demo]>=0.1.5` into the current kernel when needed. While
-that release is not yet on PyPI, the same cell falls back to the public GitHub
-source archive. No repository clone or manual Python-path setup is required.
+Download the notebook, open it in a Python 3.11 or newer Jupyter environment,
+and run it top to bottom. The setup cells check the kernel version, then install
+`svc-processing[demo]>=0.1.7` into the current kernel. No repository clone or
+manual Python-path setup is required.
 
 The tutorial assumes you already have a folder of authorized raw `.sig` scans.
 Set `DATA_FOLDER` to that containing folder before continuing. The public repo
@@ -31,8 +30,8 @@ In the settings cells:
   the calibrated default does not match your instrument; and
 - choose an `OUTPUT_FOLDER` where the processed files and CSVs should be saved.
 
-You can download the notebook alone, or get all project documentation and config
-examples with:
+You can download the notebook alone, or clone the repository to get all project
+documentation and config examples:
 
 ```bash
 git clone https://github.com/regs08/SVCProcessingPipeline.git
@@ -53,7 +52,7 @@ development environment, the shorter equivalent is:
 SVC_DATA_FOLDER=/path/to/your/sig/folder \
   MPLBACKEND=Agg jupyter nbconvert --to notebook --execute \
   --ExecutePreprocessor.timeout=600 \
-  notebooks/pipeline_demo.ipynb \
+  notebooks/pipeline_demo/pipeline_demo_notebook.ipynb \
   --output /tmp/demo_run.ipynb
 ```
 

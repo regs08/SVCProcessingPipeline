@@ -26,6 +26,7 @@ from typing import Iterable
 from .processor import GroupSpec, SigSpectraAverager
 from .resampler import resample_spectra
 from .run_config import PipelineSettings
+from .sig_files import find_sig_files
 from .sig_processor import SigFileProcessor
 
 
@@ -258,7 +259,7 @@ class Pipeline:
         sensor_type: str,
         end_line_value: str,
     ) -> Iterable[dict[str, str]]:
-        for output_path in sorted(output_dir.glob("*.sig")):
+        for output_path in find_sig_files(output_dir):
             yield {
                 "input_file": str(input_dir / output_path.name),
                 "processed_file": str(output_path),
